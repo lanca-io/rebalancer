@@ -7,10 +7,10 @@ import type {
   ITxWriter,
 } from '@concero/operator-utils/src/types/managers';
 import { formatUnits } from 'viem';
+import { abi as LBF_PARENT_POOL_ABI } from '../constants/lbfAbi.json';
 import type { BalanceManager } from './BalanceManager';
 import type { DeploymentManager } from './DeploymentManager';
 import type { LancaNetworkManager } from './LancaNetworkManager';
-
 export interface RebalancerConfig {
   deficitThreshold: bigint;
   surplusThreshold: bigint;
@@ -31,44 +31,6 @@ export interface RebalanceOpportunity {
   amount: bigint;
   reason: string;
 }
-
-// Dummy ABIs for now - to be replaced with actual contract ABIs
-const POOL_ABI = [
-  {
-    inputs: [],
-    name: 'getRebalancerData',
-    outputs: [
-      { name: 'deficit', type: 'uint256' },
-      { name: 'surplus', type: 'uint256' },
-    ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [{ name: 'amount', type: 'uint256' }],
-    name: 'fillDeficit',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [
-      { name: 'amount', type: 'uint256' },
-      { name: 'destinationChain', type: 'uint256' },
-    ],
-    name: 'bridgeIOU',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [{ name: 'amount', type: 'uint256' }],
-    name: 'redeemSurplus',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-] as const;
 
 export class Rebalancer extends ManagerBase {
   private static instance: Rebalancer;
@@ -161,12 +123,12 @@ export class Rebalancer extends ManagerBase {
         continue;
       }
 
-      // Create read contract watcher for getRebalancerData
+      // Create read contract watcher for getPoolData
       const watcherId = this.txReader.readContractWatcher.create(
         poolAddress,
         network,
-        'getRebalancerData',
-        POOL_ABI,
+        'getPoolData',
+        LBF_PARENT_POOL_ABI,
         async (result: [bigint, bigint], network: ConceroNetwork) => {
           await this.onPoolDataUpdate(network.name, result[0], result[1]);
         },
@@ -424,7 +386,7 @@ export class Rebalancer extends ManagerBase {
     const txId = await this.txWriter.writeContract({
       network,
       address: poolAddress,
-      abi: POOL_ABI,
+      abi: LBF_PARENT_POOL_ABI,
       functionName: 'fillDeficit',
       args: [amount],
     });
@@ -457,7 +419,7 @@ export class Rebalancer extends ManagerBase {
     const txId = await this.txWriter.writeContract({
       network: sourceNetwork,
       address: poolAddress,
-      abi: POOL_ABI,
+      abi: LBF_PARENT_POOL_ABI,
       functionName: 'bridgeIOU',
       args: [amount, BigInt(destNetwork.id)],
     });
@@ -486,7 +448,7 @@ export class Rebalancer extends ManagerBase {
     const txId = await this.txWriter.writeContract({
       network,
       address: poolAddress,
-      abi: POOL_ABI,
+      abi: LBF_PARENT_POOL_ABI,
       functionName: 'redeemSurplus',
       args: [amount],
     });

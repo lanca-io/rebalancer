@@ -143,7 +143,7 @@ For each active network with deployments:
 
 ```
 Every 30 seconds (configurable):
-├── Call getRebalancerData() on pool contract
+├── Call getPoolData() on pool contract
 ├── Receive (deficit, surplus) values
 ├── Update internal pool state
 └── Trigger rebalancing opportunity check
