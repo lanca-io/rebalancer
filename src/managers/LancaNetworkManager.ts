@@ -11,7 +11,7 @@ export interface LancaNetworkManagerConfig {
   networkUpdateIntervalMs: number;
   whitelistedNetworkIds?: number[];
   blacklistedNetworkIds?: number[];
-  isLocalhostMode?: boolean;
+  networkMode: 'mainnet' | 'testnet' | 'localhost';
   localhostNetworks?: ConceroNetwork[];
 }
 
@@ -101,8 +101,8 @@ export class LancaNetworkManager extends ManagerBase {
   private async updateActiveNetworks(): Promise<void> {
     try {
       let conceroNetworks: ConceroNetwork[];
-      
-      if (this.config.isLocalhostMode && this.config.localhostNetworks) {
+
+      if (this.config.networkMode === 'localhost' && this.config.localhostNetworks) {
         this.logger.debug('Using localhost networks');
         conceroNetworks = this.config.localhostNetworks;
       } else {

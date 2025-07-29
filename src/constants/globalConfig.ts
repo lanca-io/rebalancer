@@ -18,8 +18,8 @@ const globalConfig: GlobalConfig = {
   },
   URLS: {
     CONCERO_RPCS: `https://raw.githubusercontent.com/concero/rpcs/refs/heads/${process.env.RPC_SERVICE_GIT_BRANCH ?? 'master'}/output`,
-    LANCA_POOL_DEPLOYMENTS: getEnvVar('LANCA_POOL_DEPLOYMENTS_URL'),
-    LANCA_TOKEN_DEPLOYMENTS: getEnvVar('LANCA_TOKEN_DEPLOYMENTS_URL'),
+    LANCA_POOL_DEPLOYMENTS: `https://raw.githubusercontent.com/lanca-io/lbf-contracts/refs/heads/master/.env.deployments.${globalConfig.NETWORK_MODE === 'mainnet' ? 'mainnet' : 'testnet'}`,
+    LANCA_TOKEN_DEPLOYMENTS: 'https://raw.githubusercontent.com/lanca-io/lbf-contracts/refs/heads/master/.env.tokens',
     V2_NETWORKS: {
       MAINNET:
         'https://github.com/concero/v2-networks/raw/refs/heads/master/networks/mainnet.json',
