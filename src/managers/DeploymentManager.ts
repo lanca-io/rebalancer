@@ -105,7 +105,7 @@ export class DeploymentManager extends ManagerBase {
       }
 
       this.logger.debug(
-        `Updated deployments - Pools: ${this.deployments.pools.size}, USDC tokens: ${this.deployments.usdcTokens.size}, IOU tokens: ${this.deployments.iouTokens.size}`
+        `Updated deployments - Pools: ${Object.keys(this.deployments.pools).length}, USDC tokens: ${Object.keys(this.deployments.usdcTokens).length}, IOU tokens: ${Object.keys(this.deployments.iouTokens).length}`
       );
     } catch (error) {
       this.logger.error('Failed to update deployments:', error);
