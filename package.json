@@ -19,8 +19,6 @@
     "check-updates": "npx npm-check-updates"
   },
   "devDependencies": {
-    "@concero/operator-utils": "github:concero/operator-utils",
-
     "@typescript-eslint/eslint-plugin": "8.22.0",
     "@typescript-eslint/parser": "8.22.0",
     "eslint": "9.19.0",
@@ -33,6 +31,7 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@concero/operator-utils": "github:concero/operator-utils",
     "viem": "^2.21.55"
   }
 }
