@@ -69,4 +69,25 @@ export interface GlobalConfig {
     RETRY_DELAY_MS: number;
   };
   NONCE_MANAGER: Record<string, never>;
+  localhostDeployments?: {
+    pools: Record<string, string>;
+    parentPool: { network: string; address: string };
+    usdcTokens: Record<string, string>;
+    iouTokens: Record<string, string>;
+  };
+  localhostNetworks?: Array<{
+    id: number;
+    name: string;
+    displayName: string;
+    chainId: number;
+    rpcUrls: string[];
+    nativeCurrency: {
+      name: string;
+      symbol: string;
+      decimals: number;
+    };
+    blockExplorerUrls: string[];
+    isTestnet: boolean;
+    isActive: boolean;
+  }>;
 }

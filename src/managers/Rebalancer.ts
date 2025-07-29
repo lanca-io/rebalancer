@@ -116,8 +116,35 @@ export class Rebalancer extends ManagerBase {
     const networks = this.networkManager.getActiveNetworks();
     const deployments = this.deploymentManager.getDeployments();
 
+    // First, set up parent pool listener
+    const parentPoolNetwork = deployments.parentPool.network;
+    const parentNetwork = networks.find(n => n.name === parentPoolNetwork);
+    if (!parentNetwork) {
+      throw new Error(`Parent pool network ${parentPoolNetwork} not found in active networks`);
+    }
+
+    const parentWatcherId = this.txReader.readContractWatcher.create(
+      deployments.parentPool.address,
+      parentNetwork,
+      'getPoolData',
+      LBF_PARENT_POOL_ABI,
+      async (result: [bigint, bigint], network: ConceroNetwork) => {
+        await this.onPoolDataUpdate(network.name, result[0], result[1]);
+      },
+      this.config.checkIntervalMs
+    );
+    this.watcherIds.push(parentWatcherId);
+    this.logger.info(
+      `Set up parent pool listener for ${parentPoolNetwork} at ${deployments.parentPool.address} (interval: ${this.config.checkIntervalMs}ms)`
+    );
+
+    // Then set up child pool listeners, excluding the parent pool network
     for (const network of networks) {
-      const poolAddress = deployments.pools.get(network.name);
+      if (network.name === parentPoolNetwork) {
+        continue;
+      }
+
+      const poolAddress = deployments.pools[network.name];
       if (!poolAddress) {
         this.logger.warn(`No pool address found for network ${network.name}`);
         continue;
@@ -137,7 +164,7 @@ export class Rebalancer extends ManagerBase {
 
       this.watcherIds.push(watcherId);
       this.logger.info(
-        `Set up pool listener for ${network.name} at ${poolAddress} (interval: ${this.config.checkIntervalMs}ms)`
+        `Set up child pool listener for ${network.name} at ${poolAddress} (interval: ${this.config.checkIntervalMs}ms)`
       );
     }
   }

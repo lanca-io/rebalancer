@@ -122,7 +122,7 @@ export class LancaNetworkManager extends ManagerBase {
       // Filter networks based on deployments and config
       const filteredNetworks = conceroNetworks.filter((network) => {
         // Must have pool deployment
-        if (!deployments.pools.has(network.name)) {
+        if (!(network.name in deployments.pools)) {
           this.logger.debug(
             `Excluding ${network.name} - no pool deployment found`
           );

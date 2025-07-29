@@ -11,7 +11,7 @@ const globalConfig: GlobalConfig = {
   WHITELISTED_NETWORK_IDS: {
     mainnet: [],
     testnet: [],
-    localhost: [1],
+    localhost: [],
   },
   LOGGER: {
     LOG_DIR: 'logs',

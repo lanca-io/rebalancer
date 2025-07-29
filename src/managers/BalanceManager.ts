@@ -127,8 +127,8 @@ export class BalanceManager
       try {
         const { publicClient, account } =
           this.viemClientManager.getClients(network);
-        const usdcAddress = deployments.usdcTokens.get(network.name);
-        const iouAddress = deployments.iouTokens.get(network.name);
+        const usdcAddress = deployments.usdcTokens[network.name];
+        const iouAddress = deployments.iouTokens[network.name];
 
         // Fetch all balances in parallel
         const [nativeBalance, usdcBalance, iouBalance] = await Promise.all([

@@ -15,19 +15,19 @@ export interface DeploymentManagerConfig {
 }
 
 export interface LancaDeployments {
-  pools: Map<string, Address>;
-  parentPool?: { network: string; address: Address };
-  usdcTokens: Map<string, Address>;
-  iouTokens: Map<string, Address>;
+  pools: Record<string, Address>;
+  parentPool: { network: string; address: Address };
+  usdcTokens: Record<string, Address>;
+  iouTokens: Record<string, Address>;
 }
 
 export class DeploymentManager extends ManagerBase {
   private static instance: DeploymentManager;
   private deployments: LancaDeployments = {
-    pools: new Map(),
-    parentPool: undefined,
-    usdcTokens: new Map(),
-    iouTokens: new Map(),
+    pools: {},
+    parentPool: { network: '', address: '' as Address },
+    usdcTokens: {},
+    iouTokens: {},
   };
   private deploymentFetcher: DeploymentFetcher;
   private logger: LoggerInterface;
@@ -76,14 +76,17 @@ export class DeploymentManager extends ManagerBase {
 
   public async updateDeployments(): Promise<void> {
     try {
-      if (this.config.networkMode === 'localhost' && this.config.localhostDeployments) {
+      if (
+        this.config.networkMode === 'localhost' &&
+        this.config.localhostDeployments
+      ) {
         // Use pre-configured localhost deployments
         this.logger.debug('Using localhost deployments');
         this.deployments = {
-          pools: new Map(this.config.localhostDeployments.pools),
+          pools: this.config.localhostDeployments.pools,
           parentPool: this.config.localhostDeployments.parentPool,
-          usdcTokens: new Map(this.config.localhostDeployments.usdcTokens),
-          iouTokens: new Map(this.config.localhostDeployments.iouTokens),
+          usdcTokens: this.config.localhostDeployments.usdcTokens,
+          iouTokens: this.config.localhostDeployments.iouTokens,
         };
       } else {
         // Normal flow - fetch from URLs
@@ -114,11 +117,12 @@ export class DeploymentManager extends ManagerBase {
     poolDeployments: Array<{ key: string; value: string; networkName: string }>,
     tokenDeployments: Array<{ key: string; value: string; networkName: string }>
   ): void {
-    // Clear existing deployments
-    this.deployments.pools.clear();
-    this.deployments.usdcTokens.clear();
-    this.deployments.iouTokens.clear();
-    this.deployments.parentPool = undefined;
+    // Reset deployments
+    this.deployments.pools = {};
+    this.deployments.usdcTokens = {};
+    this.deployments.iouTokens = {};
+
+    let parentPoolFound = false;
 
     // Parse pool deployments
     for (const deployment of poolDeployments) {
@@ -127,35 +131,32 @@ export class DeploymentManager extends ManagerBase {
           network: deployment.networkName,
           address: deployment.value as Address,
         };
+        parentPoolFound = true;
         this.logger.debug(
           `Found parent pool on ${deployment.networkName}: ${deployment.value}`
         );
       } else if (deployment.key.includes('CHILD_POOL')) {
-        this.deployments.pools.set(
-          deployment.networkName,
-          deployment.value as Address
-        );
+        this.deployments.pools[deployment.networkName] = deployment.value as Address;
         this.logger.debug(
           `Found child pool on ${deployment.networkName}: ${deployment.value}`
         );
       }
     }
 
+    // Ensure parent pool is always found
+    if (!parentPoolFound) {
+      throw new Error('Parent pool deployment not found');
+    }
+
     // Parse token deployments
     for (const deployment of tokenDeployments) {
       if (deployment.key.includes('USDC_')) {
-        this.deployments.usdcTokens.set(
-          deployment.networkName,
-          deployment.value as Address
-        );
+        this.deployments.usdcTokens[deployment.networkName] = deployment.value as Address;
         this.logger.debug(
           `Found USDC token on ${deployment.networkName}: ${deployment.value}`
         );
       } else if (deployment.key.includes('IOU_')) {
-        this.deployments.iouTokens.set(
-          deployment.networkName,
-          deployment.value as Address
-        );
+        this.deployments.iouTokens[deployment.networkName] = deployment.value as Address;
         this.logger.debug(
           `Found IOU token on ${deployment.networkName}: ${deployment.value}`
         );
@@ -165,31 +166,31 @@ export class DeploymentManager extends ManagerBase {
 
   public getDeployments(): LancaDeployments {
     return {
-      pools: new Map(this.deployments.pools),
+      pools: { ...this.deployments.pools },
       parentPool: this.deployments.parentPool,
-      usdcTokens: new Map(this.deployments.usdcTokens),
-      iouTokens: new Map(this.deployments.iouTokens),
+      usdcTokens: { ...this.deployments.usdcTokens },
+      iouTokens: { ...this.deployments.iouTokens },
     };
   }
 
   public getPoolAddress(networkName: string): Address | undefined {
-    return this.deployments.pools.get(networkName);
+    return this.deployments.pools[networkName];
   }
 
   public getUsdcAddress(networkName: string): Address | undefined {
-    return this.deployments.usdcTokens.get(networkName);
+    return this.deployments.usdcTokens[networkName];
   }
 
   public getIouAddress(networkName: string): Address | undefined {
-    return this.deployments.iouTokens.get(networkName);
+    return this.deployments.iouTokens[networkName];
   }
 
-  public getParentPool(): { network: string; address: Address } | undefined {
+  public getParentPool(): { network: string; address: Address } {
     return this.deployments.parentPool;
   }
 
   public hasDeploymentsForNetwork(networkName: string): boolean {
-    return this.deployments.pools.has(networkName);
+    return networkName in this.deployments.pools;
   }
 
   public dispose(): void {
