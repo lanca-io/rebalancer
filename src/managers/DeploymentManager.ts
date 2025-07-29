@@ -136,7 +136,8 @@ export class DeploymentManager extends ManagerBase {
           `Found parent pool on ${deployment.networkName}: ${deployment.value}`
         );
       } else if (deployment.key.includes('CHILD_POOL')) {
-        this.deployments.pools[deployment.networkName] = deployment.value as Address;
+        this.deployments.pools[deployment.networkName] =
+          deployment.value as Address;
         this.logger.debug(
           `Found child pool on ${deployment.networkName}: ${deployment.value}`
         );
@@ -151,12 +152,14 @@ export class DeploymentManager extends ManagerBase {
     // Parse token deployments
     for (const deployment of tokenDeployments) {
       if (deployment.key.includes('USDC_')) {
-        this.deployments.usdcTokens[deployment.networkName] = deployment.value as Address;
+        this.deployments.usdcTokens[deployment.networkName] =
+          deployment.value as Address;
         this.logger.debug(
           `Found USDC token on ${deployment.networkName}: ${deployment.value}`
         );
       } else if (deployment.key.includes('IOU_')) {
-        this.deployments.iouTokens[deployment.networkName] = deployment.value as Address;
+        this.deployments.iouTokens[deployment.networkName] =
+          deployment.value as Address;
         this.logger.debug(
           `Found IOU token on ${deployment.networkName}: ${deployment.value}`
         );

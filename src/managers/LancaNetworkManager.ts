@@ -102,7 +102,10 @@ export class LancaNetworkManager extends ManagerBase {
     try {
       let conceroNetworks: ConceroNetwork[];
 
-      if (this.config.networkMode === 'localhost' && this.config.localhostNetworks) {
+      if (
+        this.config.networkMode === 'localhost' &&
+        this.config.localhostNetworks
+      ) {
         this.logger.debug('Using localhost networks');
         conceroNetworks = this.config.localhostNetworks;
       } else {
@@ -121,10 +124,13 @@ export class LancaNetworkManager extends ManagerBase {
 
       // Filter networks based on deployments and config
       const filteredNetworks = conceroNetworks.filter((network) => {
-        // Must have pool deployment
-        if (!(network.name in deployments.pools)) {
+        const hasPoolDeployment = network.name in deployments.pools;
+        const isParentPoolNetwork =
+          network.name === deployments.parentPool.network;
+
+        if (!hasPoolDeployment && !isParentPoolNetwork) {
           this.logger.debug(
-            `Excluding ${network.name} - no pool deployment found`
+            `Excluding ${network.name} - no pool deployment and not parent pool network`
           );
           return false;
         }
