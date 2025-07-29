@@ -11,6 +11,8 @@ export interface LancaNetworkManagerConfig {
   networkUpdateIntervalMs: number;
   whitelistedNetworkIds?: number[];
   blacklistedNetworkIds?: number[];
+  isLocalhostMode?: boolean;
+  localhostNetworks?: ConceroNetwork[];
 }
 
 export class LancaNetworkManager extends ManagerBase {
@@ -98,19 +100,22 @@ export class LancaNetworkManager extends ManagerBase {
 
   private async updateActiveNetworks(): Promise<void> {
     try {
-      // Force ConceroNetworkManager to fetch latest networks
-      this.logger.debug('Triggering ConceroNetworkManager update');
-      await this.conceroNetworkManager.forceUpdate();
+      let conceroNetworks: ConceroNetwork[];
+      
+      if (this.config.isLocalhostMode && this.config.localhostNetworks) {
+        this.logger.debug('Using localhost networks');
+        conceroNetworks = this.config.localhostNetworks;
+      } else {
+        this.logger.debug('Triggering ConceroNetworkManager update');
+        await this.conceroNetworkManager.forceUpdate();
+        conceroNetworks = this.conceroNetworkManager.getActiveNetworks();
+        this.logger.debug(
+          `ConceroNetworkManager returned ${conceroNetworks.length} networks`
+        );
+      }
 
-      // Update deployments
       this.logger.debug('Updating deployments');
       await this.deploymentManager.updateDeployments();
-
-      // Get all networks from ConceroNetworkManager
-      const conceroNetworks = this.conceroNetworkManager.getActiveNetworks();
-      this.logger.debug(
-        `ConceroNetworkManager returned ${conceroNetworks.length} networks`
-      );
 
       const deployments = this.deploymentManager.getDeployments();
 

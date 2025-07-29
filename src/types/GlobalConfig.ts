@@ -1,5 +1,5 @@
 export interface GlobalConfig {
-  NETWORK_MODE: string;
+  NETWORK_MODE: 'mainnet' | 'testnet' | 'localhost';
   OPERATOR_ADDRESS: string;
   IGNORED_NETWORK_IDS: number[];
   WHITELISTED_NETWORK_IDS: {

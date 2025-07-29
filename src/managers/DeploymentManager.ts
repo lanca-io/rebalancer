@@ -10,6 +10,8 @@ export interface DeploymentManagerConfig {
   tokenDeploymentsUrl: string;
   poolPatterns: RegExp[];
   tokenPatterns: RegExp[];
+  networkMode: 'mainnet' | 'testnet' | 'localhost';
+  localhostDeployments?: LancaDeployments;
 }
 
 export interface LancaDeployments {
@@ -74,18 +76,31 @@ export class DeploymentManager extends ManagerBase {
 
   public async updateDeployments(): Promise<void> {
     try {
-      const [poolDeployments, tokenDeployments] = await Promise.all([
-        this.deploymentFetcher.getDeployments(
-          this.config.poolDeploymentsUrl,
-          this.config.poolPatterns
-        ),
-        this.deploymentFetcher.getDeployments(
-          this.config.tokenDeploymentsUrl,
-          this.config.tokenPatterns
-        ),
-      ]);
+      if (this.config.networkMode === 'localhost' && this.config.localhostDeployments) {
+        // Use pre-configured localhost deployments
+        this.logger.debug('Using localhost deployments');
+        this.deployments = {
+          pools: new Map(this.config.localhostDeployments.pools),
+          parentPool: this.config.localhostDeployments.parentPool,
+          usdcTokens: new Map(this.config.localhostDeployments.usdcTokens),
+          iouTokens: new Map(this.config.localhostDeployments.iouTokens),
+        };
+      } else {
+        // Normal flow - fetch from URLs
+        const [poolDeployments, tokenDeployments] = await Promise.all([
+          this.deploymentFetcher.getDeployments(
+            this.config.poolDeploymentsUrl,
+            this.config.poolPatterns
+          ),
+          this.deploymentFetcher.getDeployments(
+            this.config.tokenDeploymentsUrl,
+            this.config.tokenPatterns
+          ),
+        ]);
 
-      this.parseDeployments(poolDeployments, tokenDeployments);
+        this.parseDeployments(poolDeployments, tokenDeployments);
+      }
+
       this.logger.debug(
         `Updated deployments - Pools: ${this.deployments.pools.size}, USDC tokens: ${this.deployments.usdcTokens.size}, IOU tokens: ${this.deployments.iouTokens.size}`
       );

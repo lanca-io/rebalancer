@@ -18,42 +18,42 @@ import {
 } from '../managers';
 
 /** Initialize all managers in the correct dependency order */
-export async function initializeManagers(): Promise<void> {
+export async function initializeManagers(
+  config: typeof globalConfig = globalConfig
+): Promise<void> {
+
   const logger = Logger.createInstance({
     logLevelsGranular: {},
-    logLevelDefault: globalConfig.LOGGER.LOG_LEVEL_DEFAULT,
-    logDir: globalConfig.LOGGER.LOG_DIR,
-    logMaxSize: globalConfig.LOGGER.LOG_MAX_SIZE,
-    logMaxFiles: globalConfig.LOGGER.LOG_MAX_FILES,
+    logLevelDefault: config.LOGGER.LOG_LEVEL_DEFAULT,
+    logDir: config.LOGGER.LOG_DIR,
+    logMaxSize: config.LOGGER.LOG_MAX_SIZE,
+    logMaxFiles: config.LOGGER.LOG_MAX_FILES,
     enableConsoleTransport: process.env.NODE_ENV !== 'production',
   });
   await logger.initialize();
 
   const httpLoggerInstance = logger.getLogger('HttpClient');
   const httpClient = HttpClient.createInstance(httpLoggerInstance, {
-    retryDelay: globalConfig.HTTPCLIENT.RETRY_DELAY,
-    maxRetries: globalConfig.HTTPCLIENT.MAX_RETRIES,
-    defaultTimeout: globalConfig.HTTPCLIENT.DEFAULT_TIMEOUT,
+    retryDelay: config.HTTPCLIENT.RETRY_DELAY,
+    maxRetries: config.HTTPCLIENT.MAX_RETRIES,
+    defaultTimeout: config.HTTPCLIENT.DEFAULT_TIMEOUT,
   });
 
   await httpClient.initialize();
 
   // Core infrastructure managers
   const rpcManager = RpcManager.createInstance(logger.getLogger('RpcManager'), {
-    rpcOverrides: globalConfig.RPC.OVERRIDE,
-    rpcExtensions: globalConfig.RPC.EXTENSION,
-    conceroRpcsUrl: globalConfig.URLS.CONCERO_RPCS,
-    networkMode: globalConfig.NETWORK_MODE as
-      | 'mainnet'
-      | 'testnet'
-      | 'localhost',
+    rpcOverrides: config.RPC.OVERRIDE,
+    rpcExtensions: config.RPC.EXTENSION,
+    conceroRpcsUrl: config.URLS.CONCERO_RPCS,
+    networkMode: config.NETWORK_MODE
   });
 
   const viemClientManager = ViemClientManager.createInstance(
     logger.getLogger('ViemClientManager'),
     rpcManager,
     {
-      fallbackTransportOptions: globalConfig.VIEM.FALLBACK_TRANSPORT_OPTIONS,
+      fallbackTransportOptions: config.VIEM.FALLBACK_TRANSPORT_OPTIONS,
     }
   );
 
@@ -62,15 +62,12 @@ export async function initializeManagers(): Promise<void> {
     logger.getLogger('ConceroNetworkManager'),
     httpClient,
     {
-      networkMode: globalConfig.NETWORK_MODE as
-        | 'mainnet'
-        | 'testnet'
-        | 'localhost',
-      ignoredNetworkIds: globalConfig.IGNORED_NETWORK_IDS,
-      whitelistedNetworkIds: globalConfig.WHITELISTED_NETWORK_IDS,
-      defaultConfirmations: globalConfig.TX_MANAGER.DEFAULT_CONFIRMATIONS,
-      mainnetUrl: globalConfig.URLS.V2_NETWORKS.MAINNET,
-      testnetUrl: globalConfig.URLS.V2_NETWORKS.TESTNET,
+      networkMode: config.NETWORK_MODE,
+      ignoredNetworkIds: config.IGNORED_NETWORK_IDS,
+      whitelistedNetworkIds: config.WHITELISTED_NETWORK_IDS,
+      defaultConfirmations: config.TX_MANAGER.DEFAULT_CONFIRMATIONS,
+      mainnetUrl: config.URLS.V2_NETWORKS.MAINNET,
+      testnetUrl: config.URLS.V2_NETWORKS.TESTNET,
     }
   );
 
@@ -78,10 +75,14 @@ export async function initializeManagers(): Promise<void> {
   const deploymentManager = DeploymentManager.createInstance(
     logger.getLogger('DeploymentManager'),
     {
-      poolDeploymentsUrl: globalConfig.URLS.LANCA_POOL_DEPLOYMENTS,
-      tokenDeploymentsUrl: globalConfig.URLS.LANCA_TOKEN_DEPLOYMENTS,
-      poolPatterns: globalConfig.DEPLOYMENT_MANAGER.POOL_PATTERNS,
-      tokenPatterns: globalConfig.DEPLOYMENT_MANAGER.TOKEN_PATTERNS,
+      poolDeploymentsUrl: config.URLS.LANCA_POOL_DEPLOYMENTS,
+      tokenDeploymentsUrl: config.URLS.LANCA_TOKEN_DEPLOYMENTS,
+      poolPatterns: config.DEPLOYMENT_MANAGER.POOL_PATTERNS,
+      tokenPatterns: config.DEPLOYMENT_MANAGER.TOKEN_PATTERNS,
+      networkMode: config.NETWORK_MODE,
+      ...(config.NETWORK_MODE === 'localhost' && config.LOCALHOST_DEPLOYMENTS
+        ? { localhostDeployments: config.LOCALHOST_DEPLOYMENTS }
+        : {}),
     }
   );
 
@@ -92,12 +93,10 @@ export async function initializeManagers(): Promise<void> {
     deploymentManager,
     {
       networkUpdateIntervalMs:
-        globalConfig.LANCA_NETWORK_MANAGER.NETWORK_UPDATE_INTERVAL_MS,
+        config.LANCA_NETWORK_MANAGER.NETWORK_UPDATE_INTERVAL_MS,
       whitelistedNetworkIds:
-        globalConfig.WHITELISTED_NETWORK_IDS[
-          globalConfig.NETWORK_MODE as keyof typeof globalConfig.WHITELISTED_NETWORK_IDS
-        ],
-      blacklistedNetworkIds: globalConfig.IGNORED_NETWORK_IDS,
+        config.WHITELISTED_NETWORK_IDS[config.NETWORK_MODE],
+      blacklistedNetworkIds: config.IGNORED_NETWORK_IDS,
     }
   );
 
@@ -107,7 +106,7 @@ export async function initializeManagers(): Promise<void> {
     viemClientManager,
     deploymentManager,
     {
-      updateIntervalMs: globalConfig.BALANCE_MANAGER.UPDATE_INTERVAL_MS,
+      updateIntervalMs: config.BALANCE_MANAGER.UPDATE_INTERVAL_MS,
     }
   );
 
@@ -134,9 +133,9 @@ export async function initializeManagers(): Promise<void> {
     logger.getLogger('TxMonitor'),
     viemClientManager,
     {
-      checkIntervalMs: globalConfig.TX_MONITOR.CHECK_INTERVAL_MS,
-      dropTimeoutMs: globalConfig.TX_MONITOR.DROP_TIMEOUT_MS,
-      retryDelayMs: globalConfig.TX_MONITOR.RETRY_DELAY_MS,
+      checkIntervalMs: config.TX_MONITOR.CHECK_INTERVAL_MS,
+      dropTimeoutMs: config.TX_MONITOR.DROP_TIMEOUT_MS,
+      retryDelayMs: config.TX_MONITOR.RETRY_DELAY_MS,
     }
   );
 
@@ -149,7 +148,7 @@ export async function initializeManagers(): Promise<void> {
 
   const nonceManager = NonceManager.createInstance(
     logger.getLogger('NonceManager'),
-    globalConfig.NONCE_MANAGER
+    config.NONCE_MANAGER
   );
   await nonceManager.initialize();
 
@@ -159,7 +158,7 @@ export async function initializeManagers(): Promise<void> {
     txMonitor,
     nonceManager,
     {
-      dryRun: globalConfig.TX_MANAGER.DRY_RUN,
+      dryRun: config.TX_MANAGER.DRY_RUN,
       simulateTx: false,
       defaultGasLimit: 2_000_000n,
     }
@@ -178,10 +177,10 @@ export async function initializeManagers(): Promise<void> {
     deploymentManager,
     lancaNetworkManager,
     {
-      deficitThreshold: globalConfig.REBALANCER.DEFICIT_THRESHOLD,
-      surplusThreshold: globalConfig.REBALANCER.SURPLUS_THRESHOLD,
-      checkIntervalMs: globalConfig.REBALANCER.CHECK_INTERVAL_MS,
-      netTotalAllowance: globalConfig.REBALANCER.NET_TOTAL_ALLOWANCE,
+      deficitThreshold: config.REBALANCER.DEFICIT_THRESHOLD,
+      surplusThreshold: config.REBALANCER.SURPLUS_THRESHOLD,
+      checkIntervalMs: config.REBALANCER.CHECK_INTERVAL_MS,
+      netTotalAllowance: config.REBALANCER.NET_TOTAL_ALLOWANCE,
     }
   );
 

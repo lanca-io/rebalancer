@@ -2,7 +2,7 @@ import { getEnvVar } from '@concero/operator-utils';
 import { type GlobalConfig } from '../types/GlobalConfig';
 
 const globalConfig: GlobalConfig = {
-  NETWORK_MODE: getEnvVar('NETWORK_MODE'),
+  NETWORK_MODE: getEnvVar('NETWORK_MODE') as 'mainnet' | 'testnet' | 'localhost',
   OPERATOR_ADDRESS: getEnvVar('OPERATOR_ADDRESS'),
   IGNORED_NETWORK_IDS: [],
   WHITELISTED_NETWORK_IDS: {
