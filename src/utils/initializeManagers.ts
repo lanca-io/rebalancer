@@ -77,8 +77,12 @@ export async function initializeManagers(
   const deploymentManager = DeploymentManager.createInstance(
     logger.getLogger('DeploymentManager'),
     {
-      poolDeploymentsUrl: config.URLS.LANCA_POOL_DEPLOYMENTS,
-      tokenDeploymentsUrl: config.URLS.LANCA_TOKEN_DEPLOYMENTS,
+      poolDeploymentsUrl: config.NETWORK_MODE === 'mainnet' 
+        ? config.URLS.LANCA_POOL_DEPLOYMENTS.MAINNET 
+        : config.URLS.LANCA_POOL_DEPLOYMENTS.TESTNET,
+      tokenDeploymentsUrl: config.NETWORK_MODE === 'mainnet' 
+        ? config.URLS.LANCA_TOKEN_DEPLOYMENTS.MAINNET 
+        : config.URLS.LANCA_TOKEN_DEPLOYMENTS.TESTNET,
       poolPatterns: config.DEPLOYMENT_MANAGER.POOL_PATTERNS,
       tokenPatterns: config.DEPLOYMENT_MANAGER.TOKEN_PATTERNS,
       networkMode: config.NETWORK_MODE,

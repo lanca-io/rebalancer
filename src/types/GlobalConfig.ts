@@ -15,8 +15,14 @@ export interface GlobalConfig {
   };
   URLS: {
     CONCERO_RPCS: string;
-    LANCA_POOL_DEPLOYMENTS: string;
-    LANCA_TOKEN_DEPLOYMENTS: string;
+    LANCA_POOL_DEPLOYMENTS: {
+      MAINNET: string;
+      TESTNET: string;
+    };
+    LANCA_TOKEN_DEPLOYMENTS: {
+      MAINNET: string;
+      TESTNET: string;
+    };
     V2_NETWORKS: {
       MAINNET: string;
       TESTNET: string;

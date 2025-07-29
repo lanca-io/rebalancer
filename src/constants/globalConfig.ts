@@ -2,7 +2,10 @@ import { getEnvVar } from '@concero/operator-utils';
 import { type GlobalConfig } from '../types/GlobalConfig';
 
 const globalConfig: GlobalConfig = {
-  NETWORK_MODE: getEnvVar('NETWORK_MODE') as 'mainnet' | 'testnet' | 'localhost',
+  NETWORK_MODE: getEnvVar('NETWORK_MODE') as
+    | 'mainnet'
+    | 'testnet'
+    | 'localhost',
   OPERATOR_ADDRESS: getEnvVar('OPERATOR_ADDRESS'),
   IGNORED_NETWORK_IDS: [],
   WHITELISTED_NETWORK_IDS: {
@@ -17,9 +20,19 @@ const globalConfig: GlobalConfig = {
     LOG_LEVEL_DEFAULT: getEnvVar('LOG_LEVEL_DEFAULT'),
   },
   URLS: {
-    CONCERO_RPCS: `https://raw.githubusercontent.com/concero/rpcs/refs/heads/${process.env.RPC_SERVICE_GIT_BRANCH ?? 'master'}/output`,
-    LANCA_POOL_DEPLOYMENTS: `https://raw.githubusercontent.com/lanca-io/lbf-contracts/refs/heads/master/.env.deployments.${globalConfig.NETWORK_MODE === 'mainnet' ? 'mainnet' : 'testnet'}`,
-    LANCA_TOKEN_DEPLOYMENTS: 'https://raw.githubusercontent.com/lanca-io/lbf-contracts/refs/heads/master/.env.tokens',
+    CONCERO_RPCS: `https://raw.githubusercontent.com/concero/rpcs/refs/heads/master/output`,
+    LANCA_POOL_DEPLOYMENTS: {
+      MAINNET:
+        'https://raw.githubusercontent.com/lanca-io/lbf-contracts/refs/heads/master/.env.deployments.mainnet',
+      TESTNET:
+        'https://raw.githubusercontent.com/lanca-io/lbf-contracts/refs/heads/master/.env.deployments.testnet',
+    },
+    LANCA_TOKEN_DEPLOYMENTS: {
+      MAINNET:
+        'https://raw.githubusercontent.com/lanca-io/lbf-contracts/refs/heads/master/.env.tokens.mainnet',
+      TESTNET:
+        'https://raw.githubusercontent.com/lanca-io/lbf-contracts/refs/heads/master/.env.tokens.testnet',
+    },
     V2_NETWORKS: {
       MAINNET:
         'https://github.com/concero/v2-networks/raw/refs/heads/master/networks/mainnet.json',
