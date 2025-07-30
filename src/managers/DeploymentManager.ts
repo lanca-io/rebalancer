@@ -4,10 +4,11 @@ import {
   type LoggerInterface,
 } from '@concero/operator-utils';
 import type { Address } from 'viem';
+import type { DeploymentUrls } from '../types/GlobalConfig';
 
 export interface DeploymentManagerConfig {
-  poolDeploymentsUrl: string;
-  tokenDeploymentsUrl: string;
+  poolDeploymentUrls: DeploymentUrls;
+  tokenDeploymentUrls: DeploymentUrls;
   poolPatterns: RegExp[];
   tokenPatterns: RegExp[];
   networkMode: 'mainnet' | 'testnet' | 'localhost';
@@ -69,7 +70,7 @@ export class DeploymentManager extends ManagerBase {
       this.initialized = true;
       this.logger.debug('Initialized');
     } catch (error) {
-      this.logger.error('Failed to initialize DeploymentManager:', error);
+      this.logger.error(`Failed to initialize DeploymentManager: ${error}`);
       throw error;
     }
   }
@@ -89,16 +90,14 @@ export class DeploymentManager extends ManagerBase {
           iouTokens: this.config.localhostDeployments.iouTokens,
         };
       } else {
-        // Normal flow - fetch from URLs
+        // Normal flow - fetch from URLs based on network mode
+        const networkKey = this.config.networkMode === 'mainnet' ? 'MAINNET' : 'TESTNET';
+        const poolUrl = this.config.poolDeploymentUrls[networkKey];
+        const tokenUrl = this.config.tokenDeploymentUrls[networkKey];
+        
         const [poolDeployments, tokenDeployments] = await Promise.all([
-          this.deploymentFetcher.getDeployments(
-            this.config.poolDeploymentsUrl,
-            this.config.poolPatterns
-          ),
-          this.deploymentFetcher.getDeployments(
-            this.config.tokenDeploymentsUrl,
-            this.config.tokenPatterns
-          ),
+          this.deploymentFetcher.getDeployments(poolUrl, this.config.poolPatterns),
+          this.deploymentFetcher.getDeployments(tokenUrl, this.config.tokenPatterns),
         ]);
 
         this.parseDeployments(poolDeployments, tokenDeployments);
@@ -108,7 +107,7 @@ export class DeploymentManager extends ManagerBase {
         `Updated deployments - Pools: ${Object.keys(this.deployments.pools).length}, USDC tokens: ${Object.keys(this.deployments.usdcTokens).length}, IOU tokens: ${Object.keys(this.deployments.iouTokens).length}`
       );
     } catch (error) {
-      this.logger.error('Failed to update deployments:', error);
+      this.logger.error(`Failed to update deployments: ${error}`);
       throw error;
     }
   }

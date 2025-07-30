@@ -7,6 +7,11 @@ import type {
 } from '@concero/operator-utils/src/types/managers';
 import type { Address } from 'viem';
 import { formatUnits } from 'viem';
+import {
+  IOU_TOKEN_DECIMALS,
+  NATIVE_DECIMALS,
+  USDC_DECIMALS,
+} from '../constants';
 import type { DeploymentManager } from './DeploymentManager';
 
 export interface TokenBalance {
@@ -90,7 +95,7 @@ export class BalanceManager
       this.initialized = true;
       this.logger.debug('Initialized');
     } catch (error) {
-      this.logger.error('Failed to initialize BalanceManager:', error);
+      this.logger.error(`Failed to initialize BalanceManager: ${error}`);
       throw error;
     }
   }
@@ -102,14 +107,14 @@ export class BalanceManager
 
     // Initial update
     this.updateBalances(this.activeNetworks).catch((err) =>
-      this.logger.error('Initial balance update failed:', err)
+      this.logger.error(`Initial balance update failed: ${err}`)
     );
 
     // Set up periodic updates
     this.updateIntervalId = setInterval(
       () =>
         this.updateBalances(this.activeNetworks).catch((err) =>
-          this.logger.error('Balance update failed:', err)
+          this.logger.error(`Balance update failed: ${err}`)
         ),
       this.config.updateIntervalMs
     );
@@ -151,7 +156,7 @@ export class BalanceManager
 
         // Log balance updates
         this.logger.debug(
-          `Updated balances for ${network.name}: Native: ${formatUnits(nativeBalance, 18)}, USDC: ${formatUnits(usdcBalance, 6)}, IOU: ${formatUnits(iouBalance, 6)}`
+          `Balances for ${network.name}: Native: ${formatUnits(nativeBalance, NATIVE_DECIMALS)}, USDC: ${formatUnits(usdcBalance, USDC_DECIMALS)}, IOU: ${formatUnits(iouBalance, IOU_TOKEN_DECIMALS)}`
         );
 
         return { network: network.name, success: true };

@@ -75,7 +75,7 @@ export class LancaNetworkManager extends ManagerBase {
       this.initialized = true;
       this.logger.debug('Initialized');
     } catch (error) {
-      this.logger.error('Failed to initialize LancaNetworkManager:', error);
+      this.logger.error(`Failed to initialize LancaNetworkManager: ${error}`);
       throw error;
     }
   }
@@ -88,7 +88,7 @@ export class LancaNetworkManager extends ManagerBase {
     this.updateIntervalId = setInterval(
       () =>
         this.updateActiveNetworks().catch((err) =>
-          this.logger.error('Network update failed:', err)
+          this.logger.error(`Network update failed: ${err}`)
         ),
       this.config.networkUpdateIntervalMs
     );
@@ -176,7 +176,7 @@ export class LancaNetworkManager extends ManagerBase {
         this.logger.debug('No network changes detected');
       }
     } catch (error) {
-      this.logger.error('Failed to update active networks:', error);
+      this.logger.error(`Failed to update active networks: ${error}`);
       throw error;
     }
   }
@@ -207,8 +207,7 @@ export class LancaNetworkManager extends ManagerBase {
         await listener.onNetworksUpdated(this.activeNetworks);
       } catch (error) {
         this.logger.error(
-          `Error in network update listener ${listener.constructor.name}:`,
-          error
+          `Error in network update listener ${listener.constructor.name}: ${error}`
         );
       }
     }
@@ -259,8 +258,7 @@ export class LancaNetworkManager extends ManagerBase {
         );
       } catch (error) {
         this.logger.error(
-          `Error in initial update for ${listener.constructor.name}:`,
-          error
+          `Error in initial update for ${listener.constructor.name}: ${error}`
         );
         throw error; // Fail fast if initial updates fail
       }

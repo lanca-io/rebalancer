@@ -1,4 +1,11 @@
-export interface GlobalConfig {
+import type { LocalhostConfigOverrides } from './localhostConfigOverrides';
+
+export interface DeploymentUrls {
+  MAINNET: string;
+  TESTNET: string;
+}
+
+export interface GlobalConfig extends LocalhostConfigOverrides {
   NETWORK_MODE: 'mainnet' | 'testnet' | 'localhost';
   OPERATOR_ADDRESS: string;
   IGNORED_NETWORK_IDS: number[];
@@ -15,18 +22,9 @@ export interface GlobalConfig {
   };
   URLS: {
     CONCERO_RPCS: string;
-    LANCA_POOL_DEPLOYMENTS: {
-      MAINNET: string;
-      TESTNET: string;
-    };
-    LANCA_TOKEN_DEPLOYMENTS: {
-      MAINNET: string;
-      TESTNET: string;
-    };
-    V2_NETWORKS: {
-      MAINNET: string;
-      TESTNET: string;
-    };
+    LANCA_POOL_DEPLOYMENTS: DeploymentUrls;
+    LANCA_TOKEN_DEPLOYMENTS: DeploymentUrls;
+    V2_NETWORKS: DeploymentUrls;
   };
   VIEM: {
     FALLBACK_TRANSPORT_OPTIONS: {
@@ -62,6 +60,10 @@ export interface GlobalConfig {
     SURPLUS_THRESHOLD: bigint;
     CHECK_INTERVAL_MS: number;
     NET_TOTAL_ALLOWANCE: bigint;
+    MIN_ALLOWANCE: {
+      USDC: bigint;
+      IOU: bigint;
+    };
   };
   TX_MONITOR: {
     CHECK_INTERVAL_MS: number;
@@ -69,25 +71,4 @@ export interface GlobalConfig {
     RETRY_DELAY_MS: number;
   };
   NONCE_MANAGER: Record<string, never>;
-  localhostDeployments?: {
-    pools: Record<string, string>;
-    parentPool: { network: string; address: string };
-    usdcTokens: Record<string, string>;
-    iouTokens: Record<string, string>;
-  };
-  localhostNetworks?: Array<{
-    id: number;
-    name: string;
-    displayName: string;
-    chainId: number;
-    rpcUrls: string[];
-    nativeCurrency: {
-      name: string;
-      symbol: string;
-      decimals: number;
-    };
-    blockExplorerUrls: string[];
-    isTestnet: boolean;
-    isActive: boolean;
-  }>;
 }

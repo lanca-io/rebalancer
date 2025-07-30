@@ -9,7 +9,6 @@ import {
   TxWriter,
   ViemClientManager,
 } from '@concero/operator-utils';
-import type { ConceroNetwork } from '@concero/operator-utils/src/types/ConceroNetwork';
 import { globalConfig } from '../constants/globalConfig';
 import {
   BalanceManager,
@@ -20,9 +19,9 @@ import {
 
 /** Initialize all managers in the correct dependency order */
 export async function initializeManagers(
-  overrideConfig: typeof globalConfig = globalConfig,
+  overrideConfig: typeof globalConfig = globalConfig
 ): Promise<void> {
-  const config = {...globalConfig, ...overrideConfig}
+  const config = { ...globalConfig, ...overrideConfig };
 
   const logger = Logger.createInstance({
     logLevelsGranular: {},
@@ -48,7 +47,7 @@ export async function initializeManagers(
     rpcOverrides: config.RPC.OVERRIDE,
     rpcExtensions: config.RPC.EXTENSION,
     conceroRpcsUrl: config.URLS.CONCERO_RPCS,
-    networkMode: config.NETWORK_MODE
+    networkMode: config.NETWORK_MODE,
   });
 
   const viemClientManager = ViemClientManager.createInstance(
@@ -77,12 +76,8 @@ export async function initializeManagers(
   const deploymentManager = DeploymentManager.createInstance(
     logger.getLogger('DeploymentManager'),
     {
-      poolDeploymentsUrl: config.NETWORK_MODE === 'mainnet' 
-        ? config.URLS.LANCA_POOL_DEPLOYMENTS.MAINNET 
-        : config.URLS.LANCA_POOL_DEPLOYMENTS.TESTNET,
-      tokenDeploymentsUrl: config.NETWORK_MODE === 'mainnet' 
-        ? config.URLS.LANCA_TOKEN_DEPLOYMENTS.MAINNET 
-        : config.URLS.LANCA_TOKEN_DEPLOYMENTS.TESTNET,
+      poolDeploymentUrls: config.URLS.LANCA_POOL_DEPLOYMENTS,
+      tokenDeploymentUrls: config.URLS.LANCA_TOKEN_DEPLOYMENTS,
       poolPatterns: config.DEPLOYMENT_MANAGER.POOL_PATTERNS,
       tokenPatterns: config.DEPLOYMENT_MANAGER.TOKEN_PATTERNS,
       networkMode: config.NETWORK_MODE,

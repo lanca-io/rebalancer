@@ -5,9 +5,12 @@ import type {
   ITxMonitor,
   ITxReader,
   ITxWriter,
+  IViemClientManager,
 } from '@concero/operator-utils/src/types/managers';
 import { formatUnits } from 'viem';
+import { IOU_TOKEN_DECIMALS, USDC_DECIMALS } from '../constants';
 import { abi as LBF_PARENT_POOL_ABI } from '../constants/lbfAbi.json';
+import { abi as ERC20_ABI } from '../constants/erc20Abi.json';
 import type { BalanceManager } from './BalanceManager';
 import type { DeploymentManager } from './DeploymentManager';
 import type { LancaNetworkManager } from './LancaNetworkManager';
@@ -16,6 +19,10 @@ export interface RebalancerConfig {
   surplusThreshold: bigint;
   checkIntervalMs: number;
   netTotalAllowance: bigint;
+  minAllowance: {
+    USDC: bigint;
+    IOU: bigint;
+  };
 }
 
 export interface PoolData {
@@ -41,17 +48,20 @@ export class Rebalancer extends ManagerBase {
   private txReader: ITxReader;
   private txWriter: ITxWriter;
   private txMonitor: ITxMonitor;
+  private viemClientManager: IViemClientManager;
   private balanceManager: BalanceManager;
   private deploymentManager: DeploymentManager;
   private networkManager: LancaNetworkManager;
   private logger: LoggerInterface;
   private config: RebalancerConfig;
+  private allowanceCache: Map<string, Map<string, bigint>> = new Map();
 
   private constructor(
     logger: LoggerInterface,
     txReader: ITxReader,
     txWriter: ITxWriter,
     txMonitor: ITxMonitor,
+    viemClientManager: IViemClientManager,
     balanceManager: BalanceManager,
     deploymentManager: DeploymentManager,
     networkManager: LancaNetworkManager,
@@ -62,6 +72,7 @@ export class Rebalancer extends ManagerBase {
     this.txReader = txReader;
     this.txWriter = txWriter;
     this.txMonitor = txMonitor;
+    this.viemClientManager = viemClientManager;
     this.balanceManager = balanceManager;
     this.deploymentManager = deploymentManager;
     this.networkManager = networkManager;
@@ -73,6 +84,7 @@ export class Rebalancer extends ManagerBase {
     txReader: ITxReader,
     txWriter: ITxWriter,
     txMonitor: ITxMonitor,
+    viemClientManager: IViemClientManager,
     balanceManager: BalanceManager,
     deploymentManager: DeploymentManager,
     networkManager: LancaNetworkManager,
@@ -83,6 +95,7 @@ export class Rebalancer extends ManagerBase {
       txReader,
       txWriter,
       txMonitor,
+      viemClientManager,
       balanceManager,
       deploymentManager,
       networkManager,
@@ -107,7 +120,7 @@ export class Rebalancer extends ManagerBase {
       this.initialized = true;
       this.logger.debug('Initialized');
     } catch (error) {
-      this.logger.error('Failed to initialize Rebalancer:', error);
+      this.logger.error(`Failed to initialize Rebalancer: ${error}`);
       throw error;
     }
   }
@@ -118,9 +131,11 @@ export class Rebalancer extends ManagerBase {
 
     // First, set up parent pool listener
     const parentPoolNetwork = deployments.parentPool.network;
-    const parentNetwork = networks.find(n => n.name === parentPoolNetwork);
+    const parentNetwork = networks.find((n) => n.name === parentPoolNetwork);
     if (!parentNetwork) {
-      throw new Error(`Parent pool network ${parentPoolNetwork} not found in active networks`);
+      throw new Error(
+        `Parent pool network ${parentPoolNetwork} not found in active networks`
+      );
     }
 
     const parentWatcherId = this.txReader.readContractWatcher.create(
@@ -189,7 +204,7 @@ export class Rebalancer extends ManagerBase {
       previousData.surplus !== surplus
     ) {
       this.logger.info(
-        `Pool data updated for ${networkName}: Deficit: ${formatUnits(deficit, 6)} USDC, Surplus: ${formatUnits(surplus, 6)} USDC`
+        `Pool data updated for ${networkName}: Deficit: ${formatUnits(deficit, USDC_DECIMALS)} USDC, Surplus: ${formatUnits(surplus, USDC_DECIMALS)} USDC`
       );
     }
 
@@ -211,7 +226,7 @@ export class Rebalancer extends ManagerBase {
             type: 'fillDeficit',
             toNetwork: networkName,
             amount: fillAmount,
-            reason: `Fill deficit of ${formatUnits(data.deficit, 6)} USDC`,
+            reason: `Fill deficit of ${formatUnits(data.deficit, USDC_DECIMALS)} USDC`,
           });
         }
       }
@@ -232,7 +247,7 @@ export class Rebalancer extends ManagerBase {
             type: 'redeemSurplus',
             toNetwork: networkName,
             amount: redeemAmount,
-            reason: `Redeem ${formatUnits(redeemAmount, 6)} USDC from surplus`,
+            reason: `Redeem ${formatUnits(redeemAmount, USDC_DECIMALS)} USDC from surplus`,
           });
         }
       }
@@ -270,7 +285,7 @@ export class Rebalancer extends ManagerBase {
 
     if (netAllowance <= 0n) {
       this.logger.debug(
-        `Cannot fill deficit on ${networkName}: NET_TOTAL_ALLOWANCE exceeded (IOU: ${formatUnits(totalIOUAcrossChains, 6)}, Redeemed: ${formatUnits(this.totalRedeemedUsdc, 6)})`
+        `Cannot fill deficit on ${networkName}: NET_TOTAL_ALLOWANCE exceeded (IOU: ${formatUnits(totalIOUAcrossChains, IOU_TOKEN_DECIMALS)}, Redeemed: ${formatUnits(this.totalRedeemedUsdc, USDC_DECIMALS)})`
       );
       return false;
     }
@@ -334,7 +349,7 @@ export class Rebalancer extends ManagerBase {
         fromNetwork,
         toNetwork: bestSurplusNetwork,
         amount: iouBalance,
-        reason: `Bridge ${formatUnits(iouBalance, 6)} IOU to ${bestSurplusNetwork} (surplus: ${formatUnits(highestSurplus, 6)})`,
+        reason: `Bridge ${formatUnits(iouBalance, IOU_TOKEN_DECIMALS)} IOU to ${bestSurplusNetwork} (surplus: ${formatUnits(highestSurplus, USDC_DECIMALS)})`,
       });
     }
 
@@ -388,8 +403,7 @@ export class Rebalancer extends ManagerBase {
       }
     } catch (error) {
       this.logger.error(
-        `Failed to execute ${opportunity.type} opportunity:`,
-        error
+        `Failed to execute ${opportunity.type} opportunity: ${error}`
       );
     }
   }
@@ -405,13 +419,30 @@ export class Rebalancer extends ManagerBase {
     if (!poolAddress)
       throw new Error(`Pool address not found for ${networkName}`);
 
+    const usdcAddress = this.deploymentManager.getTokenAddress('USDC', networkName);
+    if (!usdcAddress)
+      throw new Error(`USDC address not found for ${networkName}`);
+
+    // Ensure USDC allowance before proceeding
+    const allowanceSet = await this.ensureAllowance(
+      networkName,
+      usdcAddress,
+      poolAddress,
+      amount,
+      this.config.minAllowance.USDC
+    );
+
+    if (!allowanceSet) {
+      this.logger.error(`Failed to set USDC allowance for ${poolAddress} on ${networkName}`);
+      return;
+    }
+
     this.logger.info(
-      `Filling deficit on ${networkName} with ${formatUnits(amount, 6)} USDC`
+      `Filling deficit on ${networkName} with ${formatUnits(amount, USDC_DECIMALS)} USDC`
     );
 
     // Execute transaction
-    const txId = await this.txWriter.writeContract({
-      network,
+    const txId = await this.txWriter.callContract(network, {
       address: poolAddress,
       abi: LBF_PARENT_POOL_ABI,
       functionName: 'fillDeficit',
@@ -438,13 +469,30 @@ export class Rebalancer extends ManagerBase {
     if (!poolAddress)
       throw new Error(`Pool address not found for ${fromNetwork}`);
 
+    const iouAddress = this.deploymentManager.getTokenAddress('IOU', fromNetwork);
+    if (!iouAddress)
+      throw new Error(`IOU address not found for ${fromNetwork}`);
+
+    // Ensure IOU allowance before proceeding
+    const allowanceSet = await this.ensureAllowance(
+      fromNetwork,
+      iouAddress,
+      poolAddress,
+      amount,
+      this.config.minAllowance.IOU
+    );
+
+    if (!allowanceSet) {
+      this.logger.error(`Failed to set IOU allowance for ${poolAddress} on ${fromNetwork}`);
+      return;
+    }
+
     this.logger.info(
-      `Bridging ${formatUnits(amount, 6)} IOU from ${fromNetwork} to ${toNetwork}`
+      `Bridging ${formatUnits(amount, IOU_TOKEN_DECIMALS)} IOU from ${fromNetwork} to ${toNetwork}`
     );
 
     // Execute transaction
-    const txId = await this.txWriter.writeContract({
-      network: sourceNetwork,
+    const txId = await this.txWriter.callContract(sourceNetwork, {
       address: poolAddress,
       abi: LBF_PARENT_POOL_ABI,
       functionName: 'bridgeIOU',
@@ -467,13 +515,30 @@ export class Rebalancer extends ManagerBase {
     if (!poolAddress)
       throw new Error(`Pool address not found for ${networkName}`);
 
+    const iouAddress = this.deploymentManager.getTokenAddress('IOU', networkName);
+    if (!iouAddress)
+      throw new Error(`IOU address not found for ${networkName}`);
+
+    // Ensure IOU allowance before proceeding
+    const allowanceSet = await this.ensureAllowance(
+      networkName,
+      iouAddress,
+      poolAddress,
+      amount,
+      this.config.minAllowance.IOU
+    );
+
+    if (!allowanceSet) {
+      this.logger.error(`Failed to set IOU allowance for ${poolAddress} on ${networkName}`);
+      return;
+    }
+
     this.logger.info(
-      `Redeeming ${formatUnits(amount, 6)} USDC from surplus on ${networkName}`
+      `Redeeming ${formatUnits(amount, USDC_DECIMALS)} USDC from surplus on ${networkName}`
     );
 
     // Execute transaction
-    const txId = await this.txWriter.writeContract({
-      network,
+    const txId = await this.txWriter.callContract(network, {
       address: poolAddress,
       abi: LBF_PARENT_POOL_ABI,
       functionName: 'redeemSurplus',
@@ -494,6 +559,71 @@ export class Rebalancer extends ManagerBase {
     return new Map(this.poolData);
   }
 
+  private async ensureAllowance(
+    networkName: string,
+    tokenAddress: string,
+    spenderAddress: string,
+    requiredAmount: bigint,
+    minAllowance: bigint
+  ): Promise<boolean> {
+    const network = this.networkManager.getNetworkByName(networkName);
+    if (!network) {
+      this.logger.error(`Network ${networkName} not found for allowance check`);
+      return false;
+    }
+
+    try {
+      const client = this.viemClientManager.getWalletClient(network.id);
+      if (!client) {
+        this.logger.error(`No wallet client found for ${networkName}`);
+        return false;
+      }
+
+      const operatorAddress = client.account?.address;
+      if (!operatorAddress) {
+        this.logger.error(`No operator address found for ${networkName}`);
+        return false;
+      }
+
+      // Check current allowance
+      const currentAllowance = await client.readContract({
+        address: tokenAddress as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: [operatorAddress, spenderAddress as `0x${string}`],
+      });
+
+      // If allowance is sufficient, return early
+      if (currentAllowance >= requiredAmount) {
+        this.logger.debug(
+          `Allowance sufficient: ${currentAllowance} >= ${requiredAmount} for ${spenderAddress}`
+        );
+        return true;
+      }
+
+      // Calculate new allowance (max of requiredAmount and minAllowance)
+      const newAllowance = requiredAmount > minAllowance ? requiredAmount : minAllowance;
+
+      this.logger.info(
+        `Setting allowance for ${spenderAddress}: ${currentAllowance} -> ${newAllowance}`
+      );
+
+      // Set new allowance
+      const txHash = await client.writeContract({
+        address: tokenAddress as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [spenderAddress as `0x${string}`, newAllowance],
+      });
+
+      this.logger.info(`Approve tx submitted: ${txHash} on ${networkName}`);
+      return true;
+    } catch (error) {
+      this.logger.error(`Failed to ensure allowance on ${networkName}: ${error}`);
+      return false;
+    }
+  }
+
   public dispose(): void {
     // Clean up watchers
     for (const watcherId of this.watcherIds) {
@@ -501,6 +631,7 @@ export class Rebalancer extends ManagerBase {
     }
     this.watcherIds = [];
     this.poolData.clear();
+    this.allowanceCache.clear();
     super.dispose();
     this.logger.debug('Disposed');
   }
