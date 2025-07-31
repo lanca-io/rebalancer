@@ -178,6 +178,7 @@ export async function initializeManagers(
     txReader,
     txWriter,
     txMonitor,
+    viemClientManager,
     balanceManager,
     deploymentManager,
     lancaNetworkManager,
@@ -186,6 +187,7 @@ export async function initializeManagers(
       surplusThreshold: config.REBALANCER.SURPLUS_THRESHOLD,
       checkIntervalMs: config.REBALANCER.CHECK_INTERVAL_MS,
       netTotalAllowance: config.REBALANCER.NET_TOTAL_ALLOWANCE,
+      minAllowance: config.REBALANCER.MIN_ALLOWANCE,
     }
   );
 

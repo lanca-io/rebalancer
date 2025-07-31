@@ -5,7 +5,7 @@ import type {
   IViemClientManager,
   NetworkUpdateListener,
 } from '@concero/operator-utils/src/types/managers';
-import type { Address } from 'viem';
+import type { Address, PublicClient } from 'viem';
 import { formatUnits } from 'viem';
 import {
   IOU_TOKEN_DECIMALS,
@@ -180,7 +180,7 @@ export class BalanceManager
   }
 
   private async getTokenBalance(
-    publicClient: any,
+    publicClient: PublicClient,
     tokenAddress: Address | undefined,
     accountAddress: Address
   ): Promise<bigint> {

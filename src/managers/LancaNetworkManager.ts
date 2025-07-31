@@ -2,6 +2,7 @@ import { ManagerBase } from '@concero/operator-utils';
 import type { ConceroNetwork } from '@concero/operator-utils/src/types/ConceroNetwork';
 import type { LoggerInterface } from '@concero/operator-utils/src/types/LoggerInterface';
 import type {
+  IConceroNetworkManager,
   INetworkManager,
   NetworkUpdateListener,
 } from '@concero/operator-utils/src/types/managers';
@@ -15,7 +16,10 @@ export interface LancaNetworkManagerConfig {
   localhostNetworks?: ConceroNetwork[];
 }
 
-export class LancaNetworkManager extends ManagerBase {
+export class LancaNetworkManager
+  extends ManagerBase
+  implements IConceroNetworkManager
+{
   private static instance: LancaNetworkManager;
   private conceroNetworkManager: INetworkManager;
   private deploymentManager: DeploymentManager;
@@ -260,7 +264,7 @@ export class LancaNetworkManager extends ManagerBase {
         this.logger.error(
           `Error in initial update for ${listener.constructor.name}: ${error}`
         );
-        throw error; // Fail fast if initial updates fail
+        throw error;
       }
     }
 
@@ -268,26 +272,75 @@ export class LancaNetworkManager extends ManagerBase {
   }
 
   public getActiveNetworks(): ConceroNetwork[] {
-    return [...this.activeNetworks];
+    return this.activeNetworks;
   }
 
-  public getNetworkByName(name: string): ConceroNetwork | undefined {
-    return this.activeNetworks.find((network) => network.name === name);
+  public getNetworkByName(name: string): ConceroNetwork {
+    const network = this.activeNetworks.find(
+      (network) => network.name === name
+    );
+    if (!network) {
+      throw new Error(`Network with name ${name} not found`);
+    }
+    return network;
   }
 
-  public getNetworkById(chainId: number): ConceroNetwork | undefined {
-    return this.activeNetworks.find((network) => network.id === chainId);
+  public getNetworkById(chainId: number): ConceroNetwork {
+    const network = this.activeNetworks.find(
+      (network) => network.id === chainId
+    );
+    if (!network) {
+      throw new Error(`Network with chainId ${chainId} not found`);
+    }
+    return network;
   }
 
-  public getNetworkBySelector(selector: string): ConceroNetwork | undefined {
-    return this.activeNetworks.find(
+  public getNetworkBySelector(selector: string): ConceroNetwork {
+    const network = this.activeNetworks.find(
       (network) => network.chainSelector === selector
     );
+    if (!network) {
+      throw new Error(`Network with selector ${selector} not found`);
+    }
+    return network;
   }
 
   public async forceUpdate(): Promise<void> {
     this.logger.debug('Force update requested');
     await this.updateActiveNetworks();
+  }
+
+  // IConceroNetworkManager interface implementation
+  public getMainnetNetworks(): Record<string, ConceroNetwork> {
+    const networks: Record<string, ConceroNetwork> = {};
+    this.activeNetworks
+      .filter((network) => network.mode === 'mainnet')
+      .forEach((network) => {
+        networks[network.name] = network;
+      });
+    return networks;
+  }
+
+  public getTestnetNetworks(): Record<string, ConceroNetwork> {
+    const networks: Record<string, ConceroNetwork> = {};
+    this.activeNetworks
+      .filter((network) => network.mode === 'testnet')
+      .forEach((network) => {
+        networks[network.name] = network;
+      });
+    return networks;
+  }
+
+  public getAllNetworks(): Record<string, ConceroNetwork> {
+    const networks: Record<string, ConceroNetwork> = {};
+    this.activeNetworks.forEach((network) => {
+      networks[network.name] = network;
+    });
+    return networks;
+  }
+
+  public getVerifierNetwork(): ConceroNetwork | undefined {
+    return this.conceroNetworkManager.getVerifierNetwork();
   }
 
   public dispose(): void {

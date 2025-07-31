@@ -309,7 +309,7 @@ export class Rebalancer extends ManagerBase {
 
     // Find networks with IOU balance
     const networksWithIOU = Array.from(allBalances.entries())
-      .filter(([_, balance]) => balance.iou > 0n)
+      .filter(([, balance]) => balance.iou > 0n)
       .map(([network, balance]) => ({ network, iouBalance: balance.iou }));
 
     if (networksWithIOU.length === 0) return opportunities;
