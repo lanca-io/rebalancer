@@ -154,11 +154,6 @@ export class BalanceManager
 
         this.balances.set(network.name, balance);
 
-        // Log balance updates
-        this.logger.debug(
-          `Balances for ${network.name}: Native: ${formatUnits(nativeBalance, NATIVE_DECIMALS)}, USDC: ${formatUnits(usdcBalance, USDC_DECIMALS)}, IOU: ${formatUnits(iouBalance, IOU_TOKEN_DECIMALS)} (USDC Address: ${usdcAddress}, Account: ${account.address})`
-        );
-
         return { network: network.name, success: true };
       } catch (error) {
         this.logger.error(
@@ -177,6 +172,16 @@ export class BalanceManager
         `Failed to update balances for ${failedNetworks.length} networks: ${failedNetworks.map((f) => f.network).join(', ')}`
       );
     }
+    //console.table this.balances by network, but make it human readable
+    console.table(
+      Array.from(this.balances.entries()).map(([network, balance]) => ({
+        network,
+        usdc: formatUnits(balance.usdc.toString(), USDC_DECIMALS),
+        iou: formatUnits(balance.iou.toString(), IOU_TOKEN_DECIMALS),
+        native: formatUnits(balance.native.toString(), NATIVE_DECIMALS),
+      })),
+      ['network', 'usdc', 'iou', 'native']
+    );
   }
 
   private async getTokenBalance(

@@ -411,7 +411,8 @@ export class Rebalancer extends ManagerBase {
       `Filling deficit on ${networkName} with ${formatUnits(amount, USDC_DECIMALS)} USDC`
     );
 
-    const { walletClient } = this.viemClientManager.getClients(network);
+    const { walletClient, publicClient } =
+      this.viemClientManager.getClients(network);
     if (!walletClient)
       throw new Error(`No wallet client found for ${networkName}`);
 
@@ -420,6 +421,7 @@ export class Rebalancer extends ManagerBase {
       abi: LBF_PARENT_POOL_ABI,
       functionName: 'fillDeficit',
       args: [amount],
+      gas: 1_000_000,
     });
     await publicClient.waitForTransactionReceipt({ hash: txHash });
 
