@@ -573,20 +573,21 @@ export class Rebalancer extends ManagerBase {
     }
 
     try {
-      const client = this.viemClientManager.getWalletClient(network.id);
-      if (!client) {
+      const clients = this.viemClientManager.getClients(network);
+      const { walletClient } = clients;
+      if (!walletClient) {
         this.logger.error(`No wallet client found for ${networkName}`);
         return false;
       }
 
-      const operatorAddress = client.account?.address;
+      const operatorAddress = walletClient.account?.address;
       if (!operatorAddress) {
         this.logger.error(`No operator address found for ${networkName}`);
         return false;
       }
 
       // Check current allowance
-      const currentAllowance = await client.readContract({
+      const currentAllowance = await walletClient.readContract({
         address: tokenAddress as `0x${string}`,
         abi: ERC20_ABI,
         functionName: 'allowance',
@@ -609,7 +610,7 @@ export class Rebalancer extends ManagerBase {
       );
 
       // Set new allowance
-      const txHash = await client.writeContract({
+      const txHash = await walletClient.writeContract({
         address: tokenAddress as `0x${string}`,
         abi: ERC20_ABI,
         functionName: 'approve',
