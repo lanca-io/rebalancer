@@ -9,8 +9,8 @@ import type {
 } from '@concero/operator-utils/src/types/managers';
 import { formatUnits } from 'viem';
 import { IOU_TOKEN_DECIMALS, USDC_DECIMALS } from '../constants';
-import { abi as LBF_PARENT_POOL_ABI } from '../constants/lbfAbi.json';
 import { abi as ERC20_ABI } from '../constants/erc20Abi.json';
+import { abi as LBF_PARENT_POOL_ABI } from '../constants/lbfAbi.json';
 import type { BalanceManager } from './BalanceManager';
 import type { DeploymentManager } from './DeploymentManager';
 import type { LancaNetworkManager } from './LancaNetworkManager';
@@ -433,7 +433,9 @@ export class Rebalancer extends ManagerBase {
     );
 
     if (!allowanceSet) {
-      this.logger.error(`Failed to set USDC allowance for ${poolAddress} on ${networkName}`);
+      this.logger.error(
+        `Failed to set USDC allowance for ${poolAddress} on ${networkName}`
+      );
       return;
     }
 
@@ -483,7 +485,9 @@ export class Rebalancer extends ManagerBase {
     );
 
     if (!allowanceSet) {
-      this.logger.error(`Failed to set IOU allowance for ${poolAddress} on ${fromNetwork}`);
+      this.logger.error(
+        `Failed to set IOU allowance for ${poolAddress} on ${fromNetwork}`
+      );
       return;
     }
 
@@ -529,7 +533,9 @@ export class Rebalancer extends ManagerBase {
     );
 
     if (!allowanceSet) {
-      this.logger.error(`Failed to set IOU allowance for ${poolAddress} on ${networkName}`);
+      this.logger.error(
+        `Failed to set IOU allowance for ${poolAddress} on ${networkName}`
+      );
       return;
     }
 
@@ -573,25 +579,15 @@ export class Rebalancer extends ManagerBase {
     }
 
     try {
-      const clients = this.viemClientManager.getClients(network);
-      const { walletClient } = clients;
-      if (!walletClient) {
-        this.logger.error(`No wallet client found for ${networkName}`);
-        return false;
-      }
-
-      const operatorAddress = walletClient.account?.address;
-      if (!operatorAddress) {
-        this.logger.error(`No operator address found for ${networkName}`);
-        return false;
-      }
+      const { publicClient, walletClient } =
+        this.viemClientManager.getClients(network);
 
       // Check current allowance
-      const currentAllowance = await walletClient.readContract({
+      const currentAllowance = await publicClient.readContract({
         address: tokenAddress as `0x${string}`,
         abi: ERC20_ABI,
         functionName: 'allowance',
-        args: [operatorAddress, spenderAddress as `0x${string}`],
+        args: [walletClient.account.address, spenderAddress as `0x${string}`],
       });
 
       // If allowance is sufficient, return early
@@ -603,7 +599,8 @@ export class Rebalancer extends ManagerBase {
       }
 
       // Calculate new allowance (max of requiredAmount and minAllowance)
-      const newAllowance = requiredAmount > minAllowance ? requiredAmount : minAllowance;
+      const newAllowance =
+        requiredAmount > minAllowance ? requiredAmount : minAllowance;
 
       this.logger.info(
         `Setting allowance for ${spenderAddress}: ${currentAllowance} -> ${newAllowance}`
@@ -620,7 +617,9 @@ export class Rebalancer extends ManagerBase {
       this.logger.info(`Approve tx submitted: ${txHash} on ${networkName}`);
       return true;
     } catch (error) {
-      this.logger.error(`Failed to ensure allowance on ${networkName}: ${error}`);
+      this.logger.error(
+        `Failed to ensure allowance on ${networkName}: ${error}`
+      );
       return false;
     }
   }
