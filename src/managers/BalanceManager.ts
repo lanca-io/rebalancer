@@ -156,7 +156,7 @@ export class BalanceManager
 
         // Log balance updates
         this.logger.debug(
-          `Balances for ${network.name}: Native: ${formatUnits(nativeBalance, NATIVE_DECIMALS)}, USDC: ${formatUnits(usdcBalance, USDC_DECIMALS)}, IOU: ${formatUnits(iouBalance, IOU_TOKEN_DECIMALS)}`
+          `Balances for ${network.name}: Native: ${formatUnits(nativeBalance, NATIVE_DECIMALS)}, USDC: ${formatUnits(usdcBalance, USDC_DECIMALS)}, IOU: ${formatUnits(iouBalance, IOU_TOKEN_DECIMALS)} (USDC Address: ${usdcAddress}, Account: ${account.address})`
         );
 
         return { network: network.name, success: true };
@@ -271,6 +271,11 @@ export class BalanceManager
 
     // Update balances for active networks
     await this.updateBalances(networks);
+  }
+
+  public async forceUpdate(): Promise<void> {
+    await this.updateBalances(this.activeNetworks);
+    this.logger.debug('Force updated balances');
   }
 
   public dispose(): void {

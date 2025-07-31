@@ -421,6 +421,7 @@ export class Rebalancer extends ManagerBase {
       functionName: 'fillDeficit',
       args: [amount],
     });
+    await publicClient.waitForTransactionReceipt({ hash: txHash });
 
     this.logger.info(`Fill deficit tx submitted: ${txHash} on ${networkName}`);
   }
@@ -459,7 +460,8 @@ export class Rebalancer extends ManagerBase {
       `Bridging ${formatUnits(amount, IOU_TOKEN_DECIMALS)} IOU from ${fromNetwork} to ${toNetwork}`
     );
 
-    const { walletClient } = this.viemClientManager.getClients(sourceNetwork);
+    const { walletClient, publicClient } =
+      this.viemClientManager.getClients(sourceNetwork);
     if (!walletClient)
       throw new Error(`No wallet client found for ${fromNetwork}`);
 
@@ -469,6 +471,7 @@ export class Rebalancer extends ManagerBase {
       functionName: 'bridgeIOU',
       args: [amount, BigInt(destNetwork.id)],
     });
+    await publicClient.waitForTransactionReceipt({ hash: txHash });
 
     this.logger.info(
       `Bridge IOU tx submitted: ${txHash} from ${fromNetwork} to ${toNetwork}`
@@ -503,7 +506,8 @@ export class Rebalancer extends ManagerBase {
       `Redeeming ${formatUnits(amount, USDC_DECIMALS)} USDC from surplus on ${networkName}`
     );
 
-    const { walletClient } = this.viemClientManager.getClients(network);
+    const { walletClient, publicClient } =
+      this.viemClientManager.getClients(network);
     if (!walletClient)
       throw new Error(`No wallet client found for ${networkName}`);
 
@@ -513,6 +517,7 @@ export class Rebalancer extends ManagerBase {
       functionName: 'takeSurplus',
       args: [amount],
     });
+    await publicClient.waitForTransactionReceipt({ hash: txHash });
 
     this.totalRedeemedUsdc += amount;
     this.logger.info(

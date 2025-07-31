@@ -91,19 +91,19 @@ async function main(): Promise<void> {
     await initializeManagers({
       localhostDeployments: {
         pools: {
-          localhost2: '0xcAE447Abb396Ed83a0CF5bD760fC85C2E6Bbb04D',
+          localhost2: '0x3c598f47F1fAa37395335f371ea7cd3b741D06B6',
         },
         parentPool: {
           network: 'localhost1',
-          address: '0x0A296F00bC3300153a78DC584Bc607fe8d8030A4',
+          address: '0xa45F4A08eCE764a74cE20306d704e7CbD755D8a4',
         },
         usdcTokens: {
-          localhost1: '0x3c598f47F1fAa37395335f371ea7cd3b741D06B6',
-          localhost2: '0x3c598f47F1fAa37395335f371ea7cd3b741D06B6',
+          localhost1: '0x7361dc162091e230e4DA960F8989B12E05bd2fdD',
+          localhost2: '0x7361dc162091e230e4DA960F8989B12E05bd2fdD',
         },
         iouTokens: {
-          localhost1: '0xa45F4A08eCE764a74cE20306d704e7CbD755D8a4',
-          localhost2: '0xa45F4A08eCE764a74cE20306d704e7CbD755D8a4',
+          localhost1: '0x7361dc162091e230e4DA960F8989B12E05bd2fdD',
+          localhost2: '0x7361dc162091e230e4DA960F8989B12E05bd2fdD',
         },
       },
       localhostNetworks: [
