@@ -14,6 +14,12 @@ import { abi as LBF_PARENT_POOL_ABI } from '../constants/lbfAbi.json';
 import type { BalanceManager } from './BalanceManager';
 import type { DeploymentManager } from './DeploymentManager';
 import type { LancaNetworkManager } from './LancaNetworkManager';
+import {
+  OpportunityScorer,
+  PoolData,
+  ScoredOpportunity,
+} from './OpportunityScroer';
+
 export interface RebalancerConfig {
   deficitThreshold: bigint;
   surplusThreshold: bigint;
@@ -23,16 +29,13 @@ export interface RebalancerConfig {
     USDC: bigint;
     IOU: bigint;
   };
-}
-
-export interface PoolData {
-  deficit: bigint;
-  surplus: bigint;
-  lastUpdated: Date;
+  opportunityScorer: {
+    minScore: number;
+  };
 }
 
 export interface RebalanceOpportunity {
-  type: 'fillDeficit' | 'bridgeIOU' | 'redeemSurplus';
+  type: 'fillDeficit' | 'bridgeIOU' | 'takeSurplus';
   fromNetwork?: string;
   toNetwork: string;
   amount: bigint;
@@ -43,7 +46,8 @@ export class Rebalancer extends ManagerBase {
   private static instance: Rebalancer;
   private poolData: Map<string, PoolData> = new Map();
   private watcherIds: string[] = [];
-  private totalRedeemedUsdc: bigint = 0n; // Track total USDC redeemed
+  private totalRedeemedUsdc: bigint = 0n;
+  private opportunityScorer: OpportunityScorer;
 
   private txReader: ITxReader;
   private txWriter: ITxWriter;
@@ -54,7 +58,6 @@ export class Rebalancer extends ManagerBase {
   private networkManager: LancaNetworkManager;
   private logger: LoggerInterface;
   private config: RebalancerConfig;
-  private allowanceCache: Map<string, Map<string, bigint>> = new Map();
 
   private constructor(
     logger: LoggerInterface,
@@ -77,6 +80,13 @@ export class Rebalancer extends ManagerBase {
     this.deploymentManager = deploymentManager;
     this.networkManager = networkManager;
     this.config = config;
+
+    this.opportunityScorer = new OpportunityScorer(
+      logger,
+      balanceManager,
+      networkManager,
+      config
+    );
   }
 
   public static createInstance(
@@ -118,7 +128,7 @@ export class Rebalancer extends ManagerBase {
 
     try {
       this.initialized = true;
-      this.logger.debug('Initialized');
+      this.logger.debug('Rebalancer initialized');
     } catch (error) {
       this.logger.error(`Failed to initialize Rebalancer: ${error}`);
       throw error;
@@ -129,7 +139,6 @@ export class Rebalancer extends ManagerBase {
     const networks = this.networkManager.getActiveNetworks();
     const deployments = this.deploymentManager.getDeployments();
 
-    // First, set up parent pool listener
     const parentPoolNetwork = deployments.parentPool.network;
     const parentNetwork = networks.find((n) => n.name === parentPoolNetwork);
     if (!parentNetwork) {
@@ -138,6 +147,7 @@ export class Rebalancer extends ManagerBase {
       );
     }
 
+    // Setup parent pool listener
     const parentWatcherId = this.txReader.readContractWatcher.create(
       deployments.parentPool.address,
       parentNetwork,
@@ -149,15 +159,10 @@ export class Rebalancer extends ManagerBase {
       this.config.checkIntervalMs
     );
     this.watcherIds.push(parentWatcherId);
-    this.logger.info(
-      `Set up parent pool listener for ${parentPoolNetwork} at ${deployments.parentPool.address} (interval: ${this.config.checkIntervalMs}ms)`
-    );
 
-    // Then set up child pool listeners, excluding the parent pool network
+    // Setup child pool listeners
     for (const network of networks) {
-      if (network.name === parentPoolNetwork) {
-        continue;
-      }
+      if (network.name === parentPoolNetwork) continue;
 
       const poolAddress = deployments.pools[network.name];
       if (!poolAddress) {
@@ -165,7 +170,6 @@ export class Rebalancer extends ManagerBase {
         continue;
       }
 
-      // Create read contract watcher for getPoolData
       const watcherId = this.txReader.readContractWatcher.create(
         poolAddress,
         network,
@@ -178,10 +182,9 @@ export class Rebalancer extends ManagerBase {
       );
 
       this.watcherIds.push(watcherId);
-      this.logger.info(
-        `Set up child pool listener for ${network.name} at ${poolAddress} (interval: ${this.config.checkIntervalMs}ms)`
-      );
     }
+
+    this.logger.info(`Setup ${this.watcherIds.length} pool listeners`);
   }
 
   private async onPoolDataUpdate(
@@ -189,62 +192,92 @@ export class Rebalancer extends ManagerBase {
     deficit: bigint,
     surplus: bigint
   ): Promise<void> {
-    const previousData = this.poolData.get(networkName);
-
     this.poolData.set(networkName, {
       deficit,
       surplus,
       lastUpdated: new Date(),
     });
 
-    // Log significant changes
-    if (
-      !previousData ||
-      previousData.deficit !== deficit ||
-      previousData.surplus !== surplus
-    ) {
-      this.logger.info(
-        `Pool data updated for ${networkName}: Deficit: ${formatUnits(deficit, USDC_DECIMALS)} USDC, Surplus: ${formatUnits(surplus, USDC_DECIMALS)} USDC`
-      );
-    }
+    this.logger.debug(
+      `Pool data updated for ${networkName}: ` +
+        `Deficit: ${formatUnits(deficit, USDC_DECIMALS)} USDC, ` +
+        `Surplus: ${formatUnits(surplus, USDC_DECIMALS)} USDC`
+    );
 
-    // Run rebalancing logic
     await this.checkRebalancingOpportunities();
   }
 
   private async checkRebalancingOpportunities(): Promise<void> {
+    const allOpportunities = this.discoverOpportunities();
+
+    if (allOpportunities.length === 0) return;
+
+    this.logger.info(
+      `Discovered ${allOpportunities.length} potential opportunities`
+    );
+
+    const scoredOpportunities =
+      await this.opportunityScorer.scoreAndFilterOpportunities(
+        allOpportunities
+      );
+
+    if (scoredOpportunities.length === 0) {
+      this.logger.info('No feasible opportunities after scoring');
+      return;
+    }
+
+    this.logger.info(
+      `Found ${scoredOpportunities.length} feasible opportunities:`
+    );
+    scoredOpportunities.forEach((scored, index) => {
+      this.logger.info(
+        `  ${index + 1}. ${scored.opportunity.type} (Score: ${scored.score.toFixed(2)}): ${scored.opportunity.reason}`
+      );
+    });
+
+    await this.executeOpportunities(scoredOpportunities);
+  }
+
+  private discoverOpportunities(): RebalanceOpportunity[] {
     const opportunities: RebalanceOpportunity[] = [];
 
-    // 1. Check deficit filling opportunities
+    // 1. Deficit filling opportunities
     for (const [networkName, data] of this.poolData) {
-      if (await this.shouldFillDeficit(networkName, data)) {
+      if (data.deficit >= this.config.deficitThreshold) {
         const balance = this.balanceManager.getBalance(networkName);
-        if (balance) {
+        if (balance && balance.usdc > 0n) {
           const fillAmount =
             balance.usdc < data.deficit ? balance.usdc : data.deficit;
-          opportunities.push({
-            type: 'fillDeficit',
-            toNetwork: networkName,
-            amount: fillAmount,
-            reason: `Fill deficit of ${formatUnits(data.deficit, USDC_DECIMALS)} USDC`,
-          });
+
+          // Check NET_TOTAL_ALLOWANCE
+          const totalIOUAcrossChains = this.balanceManager.getTotalIouBalance();
+          const netAllowance =
+            this.config.netTotalAllowance -
+            (totalIOUAcrossChains - this.totalRedeemedUsdc);
+
+          if (netAllowance > 0n) {
+            const actualAmount =
+              fillAmount < netAllowance ? fillAmount : netAllowance;
+            opportunities.push({
+              type: 'fillDeficit',
+              toNetwork: networkName,
+              amount: actualAmount,
+              reason: `Fill deficit of ${formatUnits(data.deficit, USDC_DECIMALS)} USDC`,
+            });
+          }
         }
       }
     }
 
-    // 2. Check IOU bridging opportunities
-    const bridgeOps = await this.checkIOUBridgingOpportunities();
-    opportunities.push(...bridgeOps);
-
-    // 3. Check surplus redemption opportunities
+    // 2. Surplus redemption opportunities
     for (const [networkName, data] of this.poolData) {
-      if (await this.shouldRedeemSurplus(networkName, data)) {
+      if (data.surplus >= this.config.surplusThreshold) {
         const balance = this.balanceManager.getBalance(networkName);
         if (balance && balance.iou > 0n) {
           const redeemAmount =
             balance.iou < data.surplus ? balance.iou : data.surplus;
           opportunities.push({
-            type: 'redeemSurplus',
+            type: 'takeSurplus',
             toNetwork: networkName,
             amount: redeemAmount,
             reason: `Redeem ${formatUnits(redeemAmount, USDC_DECIMALS)} USDC from surplus`,
@@ -253,158 +286,100 @@ export class Rebalancer extends ManagerBase {
       }
     }
 
-    // Execute opportunities
-    if (opportunities.length > 0) {
-      this.logger.info(
-        `Found ${opportunities.length} rebalancing opportunities`
-      );
-      for (const opportunity of opportunities) {
-        await this.executeOpportunity(opportunity);
-      }
-    }
+    // 3. IOU bridging opportunities (only if no local opportunities)
+    const bridgeOpportunities = this.discoverIOUBridgingOpportunities();
+    opportunities.push(...bridgeOpportunities);
+
+    return opportunities;
   }
 
-  private async shouldFillDeficit(
-    networkName: string,
-    data: PoolData
-  ): boolean {
-    if (data.deficit < this.config.deficitThreshold) {
-      return false;
-    }
-
-    const balance = this.balanceManager.getBalance(networkName);
-    if (!balance || balance.usdc === 0n) {
-      return false;
-    }
-
-    // Check NET_TOTAL_ALLOWANCE logic
-    const totalIOUAcrossChains = this.balanceManager.getTotalIouBalance();
-    const netAllowance =
-      this.config.netTotalAllowance -
-      (totalIOUAcrossChains - this.totalRedeemedUsdc);
-
-    if (netAllowance <= 0n) {
-      this.logger.debug(
-        `Cannot fill deficit on ${networkName}: NET_TOTAL_ALLOWANCE exceeded (IOU: ${formatUnits(totalIOUAcrossChains, IOU_TOKEN_DECIMALS)}, Redeemed: ${formatUnits(this.totalRedeemedUsdc, USDC_DECIMALS)})`
-      );
-      return false;
-    }
-
-    // Check native gas balance
-    if (!this.balanceManager.hasNativeBalance(networkName, 0n)) {
-      this.logger.debug(
-        `Cannot fill deficit on ${networkName}: Insufficient native gas`
-      );
-      return false;
-    }
-
-    return true;
-  }
-
-  private async checkIOUBridgingOpportunities(): Promise<
-    RebalanceOpportunity[]
-  > {
+  private discoverIOUBridgingOpportunities(): RebalanceOpportunity[] {
     const opportunities: RebalanceOpportunity[] = [];
     const allBalances = this.balanceManager.getAllBalances();
 
-    // Find networks with IOU balance
-    const networksWithIOU = Array.from(allBalances.entries())
-      .filter(([, balance]) => balance.iou > 0n)
+    // Find networks with IOU but no local opportunities
+    const candidateNetworks = Array.from(allBalances.entries())
+      .filter(([network, balance]) => {
+        if (balance.iou === 0n) return false;
+
+        // Check if network has local opportunities
+        const poolData = this.poolData.get(network);
+        if (!poolData) return false;
+
+        const hasLocalDeficit =
+          poolData.deficit >= this.config.deficitThreshold;
+        const hasLocalSurplus =
+          poolData.surplus >= this.config.surplusThreshold;
+
+        return !hasLocalDeficit && !hasLocalSurplus;
+      })
       .map(([network, balance]) => ({ network, iouBalance: balance.iou }));
 
-    if (networksWithIOU.length === 0) return opportunities;
+    if (candidateNetworks.length === 0) return opportunities;
 
-    // Find network with highest surplus
-    let bestSurplusNetwork: string | null = null;
-    let highestSurplus = 0n;
+    // Find best surplus network
+    const surplusNetworks = Array.from(this.poolData.entries())
+      .filter(([, data]) => data.surplus >= this.config.surplusThreshold)
+      .sort(([, a], [, b]) => (a.surplus > b.surplus ? -1 : 1));
 
-    for (const [networkName, data] of this.poolData) {
-      if (
-        data.surplus > highestSurplus &&
-        data.surplus >= this.config.surplusThreshold
-      ) {
-        highestSurplus = data.surplus;
-        bestSurplusNetwork = networkName;
-      }
-    }
+    if (surplusNetworks.length === 0) return opportunities;
 
-    if (!bestSurplusNetwork || highestSurplus === 0n) {
-      return opportunities;
-    }
+    const [bestSurplusNetwork, bestSurplusData] = surplusNetworks[0];
 
-    // Create bridge opportunities to the best surplus network
-    for (const { network: fromNetwork, iouBalance } of networksWithIOU) {
+    // Create bridge opportunities to best surplus network
+    for (const { network: fromNetwork, iouBalance } of candidateNetworks) {
       if (fromNetwork === bestSurplusNetwork) continue;
-
-      // Check native gas on source network
-      if (!this.balanceManager.hasNativeBalance(fromNetwork, 0n)) {
-        this.logger.debug(
-          `Cannot bridge IOU from ${fromNetwork}: Insufficient native gas`
-        );
-        continue;
-      }
 
       opportunities.push({
         type: 'bridgeIOU',
         fromNetwork,
         toNetwork: bestSurplusNetwork,
         amount: iouBalance,
-        reason: `Bridge ${formatUnits(iouBalance, IOU_TOKEN_DECIMALS)} IOU to ${bestSurplusNetwork} (surplus: ${formatUnits(highestSurplus, USDC_DECIMALS)})`,
+        reason: `Bridge ${formatUnits(iouBalance, IOU_TOKEN_DECIMALS)} IOU to ${bestSurplusNetwork} (surplus: ${formatUnits(bestSurplusData.surplus, USDC_DECIMALS)} USDC)`,
       });
     }
 
     return opportunities;
   }
 
-  private async shouldRedeemSurplus(
-    networkName: string,
-    data: PoolData
-  ): boolean {
-    if (data.surplus < this.config.surplusThreshold) {
-      return false;
+  private async executeOpportunities(
+    scoredOpportunities: ScoredOpportunity[]
+  ): Promise<void> {
+    let executedCount = 0;
+
+    for (const scored of scoredOpportunities) {
+      try {
+        await this.executeOpportunity(scored.opportunity);
+        executedCount++;
+      } catch (error) {
+        this.logger.error(`Failed to execute opportunity: ${error}`);
+      }
     }
 
-    const balance = this.balanceManager.getBalance(networkName);
-    if (!balance || balance.iou === 0n) {
-      return false;
+    if (executedCount > 0) {
+      this.logger.info(`Successfully executed ${executedCount} opportunities`);
     }
-
-    // Check native gas balance
-    if (!this.balanceManager.hasNativeBalance(networkName, 0n)) {
-      this.logger.debug(
-        `Cannot redeem surplus on ${networkName}: Insufficient native gas`
-      );
-      return false;
-    }
-
-    return true;
   }
 
   private async executeOpportunity(
     opportunity: RebalanceOpportunity
   ): Promise<void> {
-    try {
-      this.logger.info(`Executing ${opportunity.type}: ${opportunity.reason}`);
+    this.logger.info(`Executing ${opportunity.type}: ${opportunity.reason}`);
 
-      switch (opportunity.type) {
-        case 'fillDeficit':
-          await this.fillDeficit(opportunity.toNetwork, opportunity.amount);
-          break;
-        case 'bridgeIOU':
-          await this.bridgeIOU(
-            opportunity.fromNetwork!,
-            opportunity.toNetwork,
-            opportunity.amount
-          );
-          break;
-        case 'redeemSurplus':
-          await this.redeemSurplus(opportunity.toNetwork, opportunity.amount);
-          break;
-      }
-    } catch (error) {
-      this.logger.error(
-        `Failed to execute ${opportunity.type} opportunity: ${error}`
-      );
+    switch (opportunity.type) {
+      case 'fillDeficit':
+        await this.fillDeficit(opportunity.toNetwork, opportunity.amount);
+        break;
+      case 'bridgeIOU':
+        await this.bridgeIOU(
+          opportunity.fromNetwork!,
+          opportunity.toNetwork,
+          opportunity.amount
+        );
+        break;
+      case 'takeSurplus':
+        await this.takeSurplus(opportunity.toNetwork, opportunity.amount);
+        break;
     }
   }
 
@@ -423,35 +398,31 @@ export class Rebalancer extends ManagerBase {
     if (!usdcAddress)
       throw new Error(`USDC address not found for ${networkName}`);
 
-    // Ensure USDC allowance before proceeding
-    const allowanceSet = await this.ensureAllowance(
+    await this.ensureAllowance(
       networkName,
       usdcAddress,
       poolAddress,
       amount,
-      this.config.minAllowance.USDC
+      this.config.minAllowance.USDC,
+      USDC_DECIMALS
     );
-
-    if (!allowanceSet) {
-      this.logger.error(
-        `Failed to set USDC allowance for ${poolAddress} on ${networkName}`
-      );
-      return;
-    }
 
     this.logger.info(
       `Filling deficit on ${networkName} with ${formatUnits(amount, USDC_DECIMALS)} USDC`
     );
 
-    // Execute transaction
-    const txId = await this.txWriter.callContract(network, {
-      address: poolAddress,
+    const { walletClient } = this.viemClientManager.getClients(network);
+    if (!walletClient)
+      throw new Error(`No wallet client found for ${networkName}`);
+
+    const txHash = await walletClient.writeContract({
+      address: poolAddress as `0x${string}`,
       abi: LBF_PARENT_POOL_ABI,
       functionName: 'fillDeficit',
       args: [amount],
     });
 
-    this.logger.info(`Fill deficit tx submitted: ${txId} on ${networkName}`);
+    this.logger.info(`Fill deficit tx submitted: ${txHash} on ${networkName}`);
   }
 
   private async bridgeIOU(
@@ -475,40 +446,36 @@ export class Rebalancer extends ManagerBase {
     if (!iouAddress)
       throw new Error(`IOU address not found for ${fromNetwork}`);
 
-    // Ensure IOU allowance before proceeding
-    const allowanceSet = await this.ensureAllowance(
+    await this.ensureAllowance(
       fromNetwork,
       iouAddress,
       poolAddress,
       amount,
-      this.config.minAllowance.IOU
+      this.config.minAllowance.IOU,
+      IOU_TOKEN_DECIMALS
     );
-
-    if (!allowanceSet) {
-      this.logger.error(
-        `Failed to set IOU allowance for ${poolAddress} on ${fromNetwork}`
-      );
-      return;
-    }
 
     this.logger.info(
       `Bridging ${formatUnits(amount, IOU_TOKEN_DECIMALS)} IOU from ${fromNetwork} to ${toNetwork}`
     );
 
-    // Execute transaction
-    const txId = await this.txWriter.callContract(sourceNetwork, {
-      address: poolAddress,
+    const { walletClient } = this.viemClientManager.getClients(sourceNetwork);
+    if (!walletClient)
+      throw new Error(`No wallet client found for ${fromNetwork}`);
+
+    const txHash = await walletClient.writeContract({
+      address: poolAddress as `0x${string}`,
       abi: LBF_PARENT_POOL_ABI,
       functionName: 'bridgeIOU',
       args: [amount, BigInt(destNetwork.id)],
     });
 
     this.logger.info(
-      `Bridge IOU tx submitted: ${txId} from ${fromNetwork} to ${toNetwork}`
+      `Bridge IOU tx submitted: ${txHash} from ${fromNetwork} to ${toNetwork}`
     );
   }
 
-  private async redeemSurplus(
+  private async takeSurplus(
     networkName: string,
     amount: bigint
   ): Promise<void> {
@@ -523,40 +490,81 @@ export class Rebalancer extends ManagerBase {
     if (!iouAddress)
       throw new Error(`IOU address not found for ${networkName}`);
 
-    // Ensure IOU allowance before proceeding
-    const allowanceSet = await this.ensureAllowance(
+    await this.ensureAllowance(
       networkName,
       iouAddress,
       poolAddress,
       amount,
-      this.config.minAllowance.IOU
+      this.config.minAllowance.IOU,
+      IOU_TOKEN_DECIMALS
     );
-
-    if (!allowanceSet) {
-      this.logger.error(
-        `Failed to set IOU allowance for ${poolAddress} on ${networkName}`
-      );
-      return;
-    }
 
     this.logger.info(
       `Redeeming ${formatUnits(amount, USDC_DECIMALS)} USDC from surplus on ${networkName}`
     );
 
-    // Execute transaction
-    const txId = await this.txWriter.callContract(network, {
-      address: poolAddress,
+    const { walletClient } = this.viemClientManager.getClients(network);
+    if (!walletClient)
+      throw new Error(`No wallet client found for ${networkName}`);
+
+    const txHash = await walletClient.writeContract({
+      address: poolAddress as `0x${string}`,
       abi: LBF_PARENT_POOL_ABI,
-      functionName: 'redeemSurplus',
+      functionName: 'takeSurplus',
       args: [amount],
     });
 
-    // Track redeemed amount
     this.totalRedeemedUsdc += amount;
-
-    this.logger.info(`Redeem surplus tx submitted: ${txId} on ${networkName}`);
+    this.logger.info(
+      `Redeem surplus tx submitted: ${txHash} on ${networkName}`
+    );
   }
 
+  private async ensureAllowance(
+    networkName: string,
+    tokenAddress: string,
+    spenderAddress: string,
+    requiredAmount: bigint,
+    minAllowance: bigint,
+    tokenDecimals: number
+  ): Promise<void> {
+    const network = this.networkManager.getNetworkByName(networkName);
+    if (!network) throw new Error(`Network ${networkName} not found`);
+
+    const { publicClient, walletClient } =
+      this.viemClientManager.getClients(network);
+
+    const currentAllowance = await publicClient.readContract({
+      address: tokenAddress as `0x${string}`,
+      abi: ERC20_ABI,
+      functionName: 'allowance',
+      args: [walletClient.account.address, spenderAddress as `0x${string}`],
+    });
+
+    if (currentAllowance >= requiredAmount) {
+      this.logger.debug(
+        `Allowance sufficient: ${formatUnits(currentAllowance, tokenDecimals)} >= ${formatUnits(requiredAmount, tokenDecimals)}`
+      );
+      return;
+    }
+
+    const newAllowance =
+      requiredAmount > minAllowance ? requiredAmount : minAllowance;
+    this.logger.info(
+      `Setting allowance: ${formatUnits(currentAllowance, tokenDecimals)} -> ${formatUnits(newAllowance, tokenDecimals)}`
+    );
+
+    const txHash = await walletClient.writeContract({
+      address: tokenAddress as `0x${string}`,
+      abi: ERC20_ABI,
+      functionName: 'approve',
+      args: [spenderAddress as `0x${string}`, newAllowance],
+    });
+
+    this.logger.info(`Approve tx submitted: ${txHash} on ${networkName}`);
+  }
+
+  // Public getters
   public getPoolData(networkName: string): PoolData | undefined {
     return this.poolData.get(networkName);
   }
@@ -565,74 +573,17 @@ export class Rebalancer extends ManagerBase {
     return new Map(this.poolData);
   }
 
-  private async ensureAllowance(
-    networkName: string,
-    tokenAddress: string,
-    spenderAddress: string,
-    requiredAmount: bigint,
-    minAllowance: bigint
-  ): Promise<boolean> {
-    const network = this.networkManager.getNetworkByName(networkName);
-    if (!network) {
-      this.logger.error(`Network ${networkName} not found for allowance check`);
-      return false;
-    }
-
-    try {
-      const { publicClient, walletClient } =
-        this.viemClientManager.getClients(network);
-
-      // Check current allowance
-      const currentAllowance = await publicClient.readContract({
-        address: tokenAddress as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: 'allowance',
-        args: [walletClient.account.address, spenderAddress as `0x${string}`],
-      });
-
-      // If allowance is sufficient, return early
-      if (currentAllowance >= requiredAmount) {
-        this.logger.debug(
-          `Allowance sufficient: ${currentAllowance} >= ${requiredAmount} for ${spenderAddress}`
-        );
-        return true;
-      }
-
-      // Calculate new allowance (max of requiredAmount and minAllowance)
-      const newAllowance =
-        requiredAmount > minAllowance ? requiredAmount : minAllowance;
-
-      this.logger.info(
-        `Setting allowance for ${spenderAddress}: ${currentAllowance} -> ${newAllowance}`
-      );
-
-      // Set new allowance
-      const txHash = await walletClient.writeContract({
-        address: tokenAddress as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: 'approve',
-        args: [spenderAddress as `0x${string}`, newAllowance],
-      });
-
-      this.logger.info(`Approve tx submitted: ${txHash} on ${networkName}`);
-      return true;
-    } catch (error) {
-      this.logger.error(
-        `Failed to ensure allowance on ${networkName}: ${error}`
-      );
-      return false;
-    }
+  public getTotalRedeemedUsdc(): bigint {
+    return this.totalRedeemedUsdc;
   }
 
   public dispose(): void {
-    // Clean up watchers
     for (const watcherId of this.watcherIds) {
       this.txReader.readContractWatcher.remove(watcherId);
     }
     this.watcherIds = [];
     this.poolData.clear();
-    this.allowanceCache.clear();
     super.dispose();
-    this.logger.debug('Disposed');
+    this.logger.debug('Rebalancer disposed');
   }
 }

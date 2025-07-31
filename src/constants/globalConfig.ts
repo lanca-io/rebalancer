@@ -1,5 +1,7 @@
 import { getEnvVar } from '@concero/operator-utils';
-import { minutes, seconds } from 'src/utils/time';
+import { IOU_TOKEN_DECIMALS, USDC_DECIMALS } from 'src/constants/tokens';
+import { seconds } from 'src/utils/time';
+import { parseUnits } from 'viem';
 import { type GlobalConfig } from '../types/GlobalConfig';
 
 const globalConfig: GlobalConfig = {
@@ -62,27 +64,44 @@ const globalConfig: GlobalConfig = {
   },
 
   LANCA_NETWORK_MANAGER: {
-    NETWORK_UPDATE_INTERVAL_MS:
-      parseInt(getEnvVar('LANCA_NETWORK_UPDATE_INTERVAL_MS')) || minutes(30),
+    NETWORK_UPDATE_INTERVAL_MS: parseInt(
+      getEnvVar('LANCA_NETWORK_UPDATE_INTERVAL_MS')
+    ),
   },
   DEPLOYMENT_MANAGER: {
     POOL_PATTERNS: [/LBF_CHILD_POOL_(.+)/, /LBF_PARENT_POOL_(.+)/],
     TOKEN_PATTERNS: [/USDC_(.+)/, /IOU_(.+)/],
   },
   BALANCE_MANAGER: {
-    UPDATE_INTERVAL_MS:
-      parseInt(getEnvVar('BALANCE_UPDATE_INTERVAL_MS')) || seconds(60),
+    UPDATE_INTERVAL_MS: parseInt(getEnvVar('BALANCE_UPDATE_INTERVAL_MS')),
   },
   REBALANCER: {
-    DEFICIT_THRESHOLD: BigInt(getEnvVar('DEFICIT_THRESHOLD') || 10),
-    SURPLUS_THRESHOLD: BigInt(getEnvVar('SURPLUS_THRESHOLD') || 10),
-    CHECK_INTERVAL_MS:
-      parseInt(getEnvVar('REBALANCER_CHECK_INTERVAL_MS')) || seconds(30),
-    NET_TOTAL_ALLOWANCE: BigInt(getEnvVar('NET_TOTAL_ALLOWANCE')) || 1_000_000n, // Default 1M
+    DEFICIT_THRESHOLD: parseUnits(
+      getEnvVar('REBALANCER_DEFICIT_THRESHOLD'),
+      USDC_DECIMALS
+    ),
+    SURPLUS_THRESHOLD: parseUnits(
+      getEnvVar('REBALANCER_SURPLUS_THRESHOLD'),
+      USDC_DECIMALS
+    ),
+    CHECK_INTERVAL_MS: parseInt(getEnvVar('REBALANCER_CHECK_INTERVAL_MS')),
+    NET_TOTAL_ALLOWANCE: parseUnits(
+      getEnvVar('REBALANCER_NET_TOTAL_ALLOWANCE'),
+      USDC_DECIMALS
+    ),
     MIN_ALLOWANCE: {
-      USDC: BigInt(getEnvVar('MIN_ALLOWANCE_USDC') || 1_000_000n), // Default 1M USDC
-      IOU: BigInt(getEnvVar('MIN_ALLOWANCE_IOU') || 1_000_000n), // Default 1M IOU
+      USDC: parseUnits(
+        getEnvVar('REBALANCER_MIN_ALLOWANCE_USDC'),
+        USDC_DECIMALS
+      ),
+      IOU: parseUnits(
+        getEnvVar('REBALANCER_MIN_ALLOWANCE_IOU'),
+        IOU_TOKEN_DECIMALS
+      ),
     },
+  },
+  OPPORTUNITY_SCORER: {
+    MIN_SCORE: parseInt(getEnvVar('OPPORTUNITY_SCORER_MIN_SCORE')),
   },
   TX_MONITOR: {
     CHECK_INTERVAL_MS: seconds(5),

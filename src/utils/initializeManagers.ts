@@ -188,6 +188,9 @@ export async function initializeManagers(
       checkIntervalMs: config.REBALANCER.CHECK_INTERVAL_MS,
       netTotalAllowance: config.REBALANCER.NET_TOTAL_ALLOWANCE,
       minAllowance: config.REBALANCER.MIN_ALLOWANCE,
+      opportunityScorer: {
+        minScore: config.OPPORTUNITY_SCORER.MIN_SCORE,
+      },
     }
   );
 

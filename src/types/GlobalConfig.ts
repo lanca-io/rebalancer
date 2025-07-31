@@ -65,6 +65,9 @@ export interface GlobalConfig extends LocalhostConfigOverrides {
       IOU: bigint;
     };
   };
+  OPPORTUNITY_SCORER: {
+    MIN_SCORE: number;
+  };
   TX_MONITOR: {
     CHECK_INTERVAL_MS: number;
     DROP_TIMEOUT_MS: number;
