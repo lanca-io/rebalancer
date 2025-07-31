@@ -419,7 +419,7 @@ export class Rebalancer extends ManagerBase {
     if (!poolAddress)
       throw new Error(`Pool address not found for ${networkName}`);
 
-    const usdcAddress = this.deploymentManager.getTokenAddress('USDC', networkName);
+    const usdcAddress = this.deploymentManager.getUsdcAddress(networkName);
     if (!usdcAddress)
       throw new Error(`USDC address not found for ${networkName}`);
 
@@ -469,7 +469,7 @@ export class Rebalancer extends ManagerBase {
     if (!poolAddress)
       throw new Error(`Pool address not found for ${fromNetwork}`);
 
-    const iouAddress = this.deploymentManager.getTokenAddress('IOU', fromNetwork);
+    const iouAddress = this.deploymentManager.getIouAddress(fromNetwork);
     if (!iouAddress)
       throw new Error(`IOU address not found for ${fromNetwork}`);
 
@@ -515,7 +515,7 @@ export class Rebalancer extends ManagerBase {
     if (!poolAddress)
       throw new Error(`Pool address not found for ${networkName}`);
 
-    const iouAddress = this.deploymentManager.getTokenAddress('IOU', networkName);
+    const iouAddress = this.deploymentManager.getIouAddress(networkName);
     if (!iouAddress)
       throw new Error(`IOU address not found for ${networkName}`);
 
