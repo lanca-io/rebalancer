@@ -2,16 +2,13 @@ import { ManagerBase } from '@concero/operator-utils';
 import type { ConceroNetwork } from '@concero/operator-utils/src/types/ConceroNetwork';
 import type { LoggerInterface } from '@concero/operator-utils/src/types/LoggerInterface';
 import type {
+  ITxReader,
   IViemClientManager,
   NetworkUpdateListener,
 } from '@concero/operator-utils/src/types/managers';
 import type { Address, PublicClient } from 'viem';
 import { formatUnits } from 'viem';
-import {
-  IOU_TOKEN_DECIMALS,
-  NATIVE_DECIMALS,
-  USDC_DECIMALS,
-} from '../constants';
+import { abi as ERC20_ABI } from '../constants/erc20Abi.json';
 import type { DeploymentManager } from './DeploymentManager';
 
 export interface TokenBalance {
@@ -24,17 +21,6 @@ export interface BalanceManagerConfig {
   updateIntervalMs: number;
 }
 
-// ERC20 ABI for balanceOf function
-const ERC20_ABI = [
-  {
-    inputs: [{ name: 'account', type: 'address' }],
-    name: 'balanceOf',
-    outputs: [{ name: '', type: 'uint256' }],
-    stateMutability: 'view',
-    type: 'function',
-  },
-] as const;
-
 export class BalanceManager
   extends ManagerBase
   implements NetworkUpdateListener
@@ -43,21 +29,25 @@ export class BalanceManager
   private balances: Map<string, TokenBalance> = new Map();
   private viemClientManager: IViemClientManager;
   private deploymentManager: DeploymentManager;
+  private txReader: ITxReader;
   private logger: LoggerInterface;
   private config: BalanceManagerConfig;
   private updateIntervalId: NodeJS.Timeout | null = null;
   private activeNetworks: ConceroNetwork[] = [];
+  private watcherIds: string[] = [];
 
   private constructor(
     logger: LoggerInterface,
     viemClientManager: IViemClientManager,
     deploymentManager: DeploymentManager,
+    txReader: ITxReader,
     config: BalanceManagerConfig
   ) {
     super();
     this.logger = logger;
     this.viemClientManager = viemClientManager;
     this.deploymentManager = deploymentManager;
+    this.txReader = txReader;
     this.config = config;
   }
 
@@ -65,12 +55,14 @@ export class BalanceManager
     logger: LoggerInterface,
     viemClientManager: IViemClientManager,
     deploymentManager: DeploymentManager,
+    txReader: ITxReader,
     config: BalanceManagerConfig
   ): BalanceManager {
     BalanceManager.instance = new BalanceManager(
       logger,
       viemClientManager,
       deploymentManager,
+      txReader,
       config
     );
     return BalanceManager.instance;
@@ -89,10 +81,8 @@ export class BalanceManager
     if (this.initialized) return;
 
     try {
-      // Start update cycle
-      this.startUpdateCycle();
-
-      this.initialized = true;
+      // Start balance watchers using TxReader
+      this.startBalanceWatchers();
       this.logger.debug('Initialized');
     } catch (error) {
       this.logger.error(`Failed to initialize BalanceManager: ${error}`);
@@ -100,88 +90,127 @@ export class BalanceManager
     }
   }
 
-  private startUpdateCycle(): void {
-    if (this.updateIntervalId) {
-      clearInterval(this.updateIntervalId);
+  private startBalanceWatchers(): void {
+    this.clearBalanceWatchers();
+
+    const deployments = this.deploymentManager.getDeployments();
+
+    // Create watchers for each active network
+    for (const network of this.activeNetworks) {
+      const usdcAddress = deployments.usdcTokens[network.name];
+      const iouAddress = deployments.iouTokens[network.name];
+
+      if (!usdcAddress || !iouAddress) {
+        this.logger.warn(
+          `Missing token addresses for network ${network.name}, skipping balance watcher`
+        );
+        continue;
+      }
+
+      // Create watcher for USDC balance
+      const usdcWatcherId = this.txReader.readContractWatcher.create(
+        usdcAddress,
+        network,
+        'balanceOf',
+        ERC20_ABI,
+        async (result: bigint) => {
+          this.onTokenBalanceUpdate(network.name, 'usdc', result);
+        },
+        this.config.updateIntervalMs,
+        [this.getAccountAddress(network)]
+      );
+      this.watcherIds.push(usdcWatcherId);
+
+      // Create watcher for IOU balance
+      const iouWatcherId = this.txReader.readContractWatcher.create(
+        iouAddress,
+        network,
+        'balanceOf',
+        ERC20_ABI,
+        async (result: bigint) => {
+          this.onTokenBalanceUpdate(network.name, 'iou', result);
+        },
+        this.config.updateIntervalMs,
+        [this.getAccountAddress(network)]
+      );
+      this.watcherIds.push(iouWatcherId);
+
+      // Create watcher for native balance (handled differently as it's not a contract call)
+      // For native balance, we'll use the existing update cycle for now
+      // or we could create a custom watcher that uses getBalance
     }
 
-    // Initial update
-    this.updateBalances(this.activeNetworks).catch((err) =>
-      this.logger.error(`Initial balance update failed: ${err}`)
-    );
-
-    // Set up periodic updates
-    this.updateIntervalId = setInterval(
-      () =>
-        this.updateBalances(this.activeNetworks).catch((err) =>
-          this.logger.error(`Balance update failed: ${err}`)
-        ),
-      this.config.updateIntervalMs
-    );
-
     this.logger.debug(
-      `Started balance update cycle with interval: ${this.config.updateIntervalMs}ms`
+      `Started ${this.watcherIds.length} balance watchers for ${this.activeNetworks.length} networks`
     );
   }
 
+  private getAccountAddress(network: ConceroNetwork): Address {
+    const { account } = this.viemClientManager.getClients(network);
+    return account.address;
+  }
+
+  private onTokenBalanceUpdate(
+    networkName: string,
+    tokenType: 'usdc' | 'iou',
+    newBalance: bigint
+  ): void {
+    const currentBalance = this.balances.get(networkName);
+    if (!currentBalance) {
+      // Initialize balance if not exists
+      this.balances.set(networkName, {
+        native: 0n,
+        usdc: tokenType === 'usdc' ? newBalance : 0n,
+        iou: tokenType === 'iou' ? newBalance : 0n,
+      });
+    } else {
+      // Update specific token balance
+      const updatedBalance = { ...currentBalance };
+      updatedBalance[tokenType] = newBalance;
+      this.balances.set(networkName, updatedBalance);
+    }
+  }
+
   public async updateBalances(networks: ConceroNetwork[]): Promise<void> {
+    // This method is now primarily for initial setup and native balance updates
+    // Token balances are handled by TxReader watchers
+    await this.updateNativeBalances(networks);
+
+    // Initial token balance fetch if not already set
     const deployments = this.deploymentManager.getDeployments();
 
-    // Update balances in parallel for all networks
-    const balancePromises = networks.map(async (network) => {
-      try {
-        const { publicClient, account } =
-          this.viemClientManager.getClients(network);
-        const usdcAddress = deployments.usdcTokens[network.name];
-        const iouAddress = deployments.iouTokens[network.name];
+    for (const network of networks) {
+      const { publicClient, account } =
+        this.viemClientManager.getClients(network);
+      const usdcAddress = deployments.usdcTokens[network.name];
+      const iouAddress = deployments.iouTokens[network.name];
 
-        // Fetch all balances in parallel
-        const [nativeBalance, usdcBalance, iouBalance] = await Promise.all([
-          publicClient.getBalance({ address: account.address }),
+      const currentBalance = this.balances.get(network.name);
+      if (
+        !currentBalance ||
+        (currentBalance.usdc === 0n && currentBalance.iou === 0n)
+      ) {
+        // Initial fetch if balance doesn't exist or is zero
+        const [usdcBalance, iouBalance] = await Promise.all([
           usdcAddress
             ? this.getTokenBalance(publicClient, usdcAddress, account.address)
-            : Promise.resolve(0n),
+            : 0n,
           iouAddress
             ? this.getTokenBalance(publicClient, iouAddress, account.address)
-            : Promise.resolve(0n),
+            : 0n,
         ]);
 
-        const balance: TokenBalance = {
+        const nativeBalance = await publicClient.getBalance({
+          address: account.address,
+        });
+
+        this.balances.set(network.name, {
           native: nativeBalance,
           usdc: usdcBalance,
           iou: iouBalance,
-        };
-
-        this.balances.set(network.name, balance);
-
-        return { network: network.name, success: true };
-      } catch (error) {
-        this.logger.error(
-          `Failed to update balances for ${network.name}:`,
-          error
-        );
-        return { network: network.name, success: false, error };
+        });
       }
-    });
-
-    const results = await Promise.all(balancePromises);
-    const failedNetworks = results.filter((r) => !r.success);
-
-    if (failedNetworks.length > 0) {
-      this.logger.warn(
-        `Failed to update balances for ${failedNetworks.length} networks: ${failedNetworks.map((f) => f.network).join(', ')}`
-      );
     }
-    //console.table this.balances by network, but make it human readable
-    console.table(
-      Array.from(this.balances.entries()).map(([network, balance]) => ({
-        network,
-        usdc: formatUnits(balance.usdc.toString(), USDC_DECIMALS),
-        iou: formatUnits(balance.iou.toString(), IOU_TOKEN_DECIMALS),
-        native: formatUnits(balance.native.toString(), NATIVE_DECIMALS),
-      })),
-      ['network', 'usdc', 'iou', 'native']
-    );
   }
 
   private async getTokenBalance(
@@ -274,16 +303,140 @@ export class BalanceManager
       }
     }
 
-    // Update balances for active networks
-    await this.updateBalances(networks);
+    // Recreate watchers for new active networks
+    this.startBalanceWatchers();
+
+    // Also update native balances since they can't be watched via contract
+    await this.updateNativeBalances(networks);
   }
 
   public async forceUpdate(): Promise<void> {
-    await this.updateBalances(this.activeNetworks);
+    await this.updateNativeBalances(this.activeNetworks);
     this.logger.debug('Force updated balances');
   }
 
+  private async updateNativeBalances(
+    networks: ConceroNetwork[]
+  ): Promise<void> {
+    const balancePromises = networks.map(async (network) => {
+      try {
+        const { publicClient, account } =
+          this.viemClientManager.getClients(network);
+
+        const nativeBalance = await publicClient.getBalance({
+          address: account.address,
+        });
+
+        const currentBalance = this.balances.get(network.name);
+        const updatedBalance: TokenBalance = {
+          native: nativeBalance,
+          usdc: currentBalance?.usdc || 0n,
+          iou: currentBalance?.iou || 0n,
+        };
+
+        this.balances.set(network.name, updatedBalance);
+
+        return { network: network.name, success: true };
+      } catch (error) {
+        this.logger.error(
+          `Failed to update native balance for ${network.name}:`,
+          error
+        );
+        return { network: network.name, success: false, error };
+      }
+    });
+
+    const results = await Promise.all(balancePromises);
+    const failedNetworks = results.filter((r) => !r.success);
+
+    if (failedNetworks.length > 0) {
+      this.logger.warn(
+        `Failed to update native balances for ${failedNetworks.length} networks: ${failedNetworks.map((f) => f.network).join(', ')}`
+      );
+    }
+  }
+
+  public async ensureAllowance(
+    networkName: string,
+    tokenAddress: string,
+    spenderAddress: string,
+    requiredAmount: bigint,
+    minAllowance: bigint,
+    tokenDecimals: number
+  ): Promise<void> {
+    const network = this.activeNetworks.find((n) => n.name === networkName);
+    if (!network)
+      throw new Error(`Network ${networkName} not found or not active`);
+
+    const { publicClient, walletClient } =
+      this.viemClientManager.getClients(network);
+    if (!walletClient)
+      throw new Error(`No wallet client found for ${networkName}`);
+
+    const currentAllowance = await publicClient.readContract({
+      address: tokenAddress as `0x${string}`,
+      abi: ERC20_ABI,
+      functionName: 'allowance',
+      args: [walletClient.account.address, spenderAddress as `0x${string}`],
+    });
+
+    if (currentAllowance >= requiredAmount) {
+      this.logger.debug(
+        `Allowance sufficient: ${formatUnits(currentAllowance, tokenDecimals)} >= ${formatUnits(requiredAmount, tokenDecimals)}`
+      );
+      return;
+    }
+
+    const newAllowance =
+      requiredAmount > minAllowance ? requiredAmount : minAllowance;
+    this.logger.info(
+      `Setting allowance: ${formatUnits(currentAllowance, tokenDecimals)} -> ${formatUnits(newAllowance, tokenDecimals)}`
+    );
+
+    const txHash = await walletClient.writeContract({
+      address: tokenAddress as `0x${string}`,
+      abi: ERC20_ABI,
+      functionName: 'approve',
+      args: [spenderAddress as `0x${string}`, newAllowance],
+    });
+
+    this.logger.info(`Approve tx submitted: ${txHash} on ${networkName}`);
+  }
+
+  public async getAllowance(
+    networkName: string,
+    tokenAddress: string,
+    spenderAddress: string
+  ): Promise<bigint> {
+    const network = this.activeNetworks.find((n) => n.name === networkName);
+    if (!network)
+      throw new Error(`Network ${networkName} not found or not active`);
+
+    const { publicClient, walletClient } =
+      this.viemClientManager.getClients(network);
+    if (!walletClient)
+      throw new Error(`No wallet client found for ${networkName}`);
+
+    const allowance = await publicClient.readContract({
+      address: tokenAddress as `0x${string}`,
+      abi: ERC20_ABI,
+      functionName: 'allowance',
+      args: [walletClient.account.address, spenderAddress as `0x${string}`],
+    });
+
+    return allowance as bigint;
+  }
+
+  private clearBalanceWatchers(): void {
+    for (const watcherId of this.watcherIds) {
+      this.txReader.readContractWatcher.remove(watcherId);
+    }
+    this.watcherIds = [];
+  }
+
   public dispose(): void {
+    this.clearBalanceWatchers();
+
     if (this.updateIntervalId) {
       clearInterval(this.updateIntervalId);
       this.updateIntervalId = null;

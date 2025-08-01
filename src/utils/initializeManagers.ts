@@ -105,34 +105,6 @@ export async function initializeManagers(
     }
   );
 
-  // Initialize BalanceManager
-  const balanceManager = BalanceManager.createInstance(
-    logger.getLogger('BalanceManager'),
-    viemClientManager,
-    deploymentManager,
-    {
-      updateIntervalMs: config.BALANCE_MANAGER.UPDATE_INTERVAL_MS,
-    }
-  );
-
-  // Initialize core managers
-  await conceroNetworkManager.initialize();
-  await rpcManager.initialize();
-  await viemClientManager.initialize();
-  await deploymentManager.initialize();
-  await lancaNetworkManager.initialize();
-  await balanceManager.initialize();
-
-  // LancaNetworkManager registers and controls all network update listeners
-  // It dictates when ConceroNetworkManager should update
-  lancaNetworkManager.registerUpdateListener(rpcManager);
-  lancaNetworkManager.registerUpdateListener(viemClientManager);
-  lancaNetworkManager.registerUpdateListener(balanceManager);
-
-  // Trigger initial updates through LancaNetworkManager
-  // This will cascade updates to all registered listeners
-  await lancaNetworkManager.triggerInitialUpdates();
-
   // Initialize transaction managers
   const txMonitor = TxMonitor.createInstance(
     logger.getLogger('TxMonitor'),
@@ -150,6 +122,36 @@ export async function initializeManagers(
     viemClientManager,
     {}
   );
+
+  // Initialize BalanceManager (depends on txReader)
+  const balanceManager = BalanceManager.createInstance(
+    logger.getLogger('BalanceManager'),
+    viemClientManager,
+    deploymentManager,
+    txReader,
+    {
+      updateIntervalMs: config.BALANCE_MANAGER.UPDATE_INTERVAL_MS,
+    }
+  );
+
+  // Initialize core managers
+  await conceroNetworkManager.initialize();
+  await rpcManager.initialize();
+  await viemClientManager.initialize();
+  await deploymentManager.initialize();
+  await lancaNetworkManager.initialize();
+  await txReader.initialize();
+  await balanceManager.initialize();
+
+  // LancaNetworkManager registers and controls all network update listeners
+  // It dictates when ConceroNetworkManager should update
+  lancaNetworkManager.registerUpdateListener(rpcManager);
+  lancaNetworkManager.registerUpdateListener(viemClientManager);
+  lancaNetworkManager.registerUpdateListener(balanceManager);
+
+  // Trigger initial updates through LancaNetworkManager
+  // This will cascade updates to all registered listeners
+  await lancaNetworkManager.triggerInitialUpdates();
 
   const nonceManager = NonceManager.createInstance(
     logger.getLogger('NonceManager'),

@@ -138,7 +138,7 @@ export class OpportunityScorer {
   }
 
   private calculateCostFactor(opportunity: RebalanceOpportunity): number {
-    const gasEstimate = 1;
+    // const gasEstimate = 1; // TODO: Implement proper gas estimation
     const gasCostUSD = 1;
 
     let totalCostUSD = gasCostUSD;
@@ -162,7 +162,7 @@ export class OpportunityScorer {
     return Math.max(0.1, 1.0 - costRatio);
   }
 
-  private getBridgeFee(fromNetwork: string, toNetwork: string): bigint {
+  private getBridgeFee(_fromNetwork: string, _toNetwork: string): bigint { // eslint-disable-line @typescript-eslint/no-unused-vars
     return 0n;
   }
 }

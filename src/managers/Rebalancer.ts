@@ -9,7 +9,6 @@ import type {
 } from '@concero/operator-utils/src/types/managers';
 import { formatUnits } from 'viem';
 import { IOU_TOKEN_DECIMALS, USDC_DECIMALS } from '../constants';
-import { abi as ERC20_ABI } from '../constants/erc20Abi.json';
 import { abi as LBF_PARENT_POOL_ABI } from '../constants/lbfAbi.json';
 import type { BalanceManager } from './BalanceManager';
 import type { DeploymentManager } from './DeploymentManager';
@@ -198,11 +197,11 @@ export class Rebalancer extends ManagerBase {
       lastUpdated: new Date(),
     });
 
-    this.logger.debug(
-      `Pool data updated for ${networkName}: ` +
-        `Deficit: ${formatUnits(deficit, USDC_DECIMALS)} USDC, ` +
-        `Surplus: ${formatUnits(surplus, USDC_DECIMALS)} USDC`
-    );
+    // this.logger.debug(
+    //   `Pool data updated for ${networkName}: ` +
+    //     `Deficit: ${formatUnits(deficit, USDC_DECIMALS)} USDC, ` +
+    //     `Surplus: ${formatUnits(surplus, USDC_DECIMALS)} USDC`
+    // );
 
     await this.checkRebalancingOpportunities();
   }
@@ -211,10 +210,6 @@ export class Rebalancer extends ManagerBase {
     const allOpportunities = this.discoverOpportunities();
 
     if (allOpportunities.length === 0) return;
-
-    this.logger.info(
-      `Discovered ${allOpportunities.length} potential opportunities`
-    );
 
     const scoredOpportunities =
       await this.opportunityScorer.scoreAndFilterOpportunities(
@@ -345,19 +340,12 @@ export class Rebalancer extends ManagerBase {
   private async executeOpportunities(
     scoredOpportunities: ScoredOpportunity[]
   ): Promise<void> {
-    let executedCount = 0;
-
     for (const scored of scoredOpportunities) {
       try {
         await this.executeOpportunity(scored.opportunity);
-        executedCount++;
       } catch (error) {
         this.logger.error(`Failed to execute opportunity: ${error}`);
       }
-    }
-
-    if (executedCount > 0) {
-      this.logger.info(`Successfully executed ${executedCount} opportunities`);
     }
   }
 
@@ -398,17 +386,13 @@ export class Rebalancer extends ManagerBase {
     if (!usdcAddress)
       throw new Error(`USDC address not found for ${networkName}`);
 
-    await this.ensureAllowance(
+    await this.balanceManager.ensureAllowance(
       networkName,
       usdcAddress,
       poolAddress,
       amount,
       this.config.minAllowance.USDC,
       USDC_DECIMALS
-    );
-
-    this.logger.info(
-      `Filling deficit on ${networkName} with ${formatUnits(amount, USDC_DECIMALS)} USDC`
     );
 
     const { walletClient, publicClient } =
@@ -425,7 +409,9 @@ export class Rebalancer extends ManagerBase {
     });
     await publicClient.waitForTransactionReceipt({ hash: txHash });
 
-    this.logger.info(`Fill deficit tx submitted: ${txHash} on ${networkName}`);
+    this.logger.info(
+      `Fill deficit of ${formatUnits(amount, USDC_DECIMALS)} USDC tx submitted: ${txHash} on ${networkName}`
+    );
   }
 
   private async bridgeIOU(
@@ -449,17 +435,13 @@ export class Rebalancer extends ManagerBase {
     if (!iouAddress)
       throw new Error(`IOU address not found for ${fromNetwork}`);
 
-    await this.ensureAllowance(
+    await this.balanceManager.ensureAllowance(
       fromNetwork,
       iouAddress,
       poolAddress,
       amount,
       this.config.minAllowance.IOU,
       IOU_TOKEN_DECIMALS
-    );
-
-    this.logger.info(
-      `Bridging ${formatUnits(amount, IOU_TOKEN_DECIMALS)} IOU from ${fromNetwork} to ${toNetwork}`
     );
 
     const { walletClient, publicClient } =
@@ -476,7 +458,7 @@ export class Rebalancer extends ManagerBase {
     await publicClient.waitForTransactionReceipt({ hash: txHash });
 
     this.logger.info(
-      `Bridge IOU tx submitted: ${txHash} from ${fromNetwork} to ${toNetwork}`
+      `Bridge IOU of ${formatUnits(amount, IOU_TOKEN_DECIMALS)} IOU tx submitted: ${txHash} from ${fromNetwork} to ${toNetwork}`
     );
   }
 
@@ -495,17 +477,13 @@ export class Rebalancer extends ManagerBase {
     if (!iouAddress)
       throw new Error(`IOU address not found for ${networkName}`);
 
-    await this.ensureAllowance(
+    await this.balanceManager.ensureAllowance(
       networkName,
       iouAddress,
       poolAddress,
       amount,
       this.config.minAllowance.IOU,
       IOU_TOKEN_DECIMALS
-    );
-
-    this.logger.info(
-      `Redeeming ${formatUnits(amount, USDC_DECIMALS)} USDC from surplus on ${networkName}`
     );
 
     const { walletClient, publicClient } =
@@ -518,57 +496,14 @@ export class Rebalancer extends ManagerBase {
       abi: LBF_PARENT_POOL_ABI,
       functionName: 'takeSurplus',
       args: [amount],
+      gasLimit: 1_000_000,
     });
     await publicClient.waitForTransactionReceipt({ hash: txHash });
 
     this.totalRedeemedUsdc += amount;
     this.logger.info(
-      `Redeem surplus tx submitted: ${txHash} on ${networkName}`
+      `Redeem surplus of ${formatUnits(amount, IOU_TOKEN_DECIMALS)} IOU tx submitted: ${txHash} on ${networkName}`
     );
-  }
-
-  private async ensureAllowance(
-    networkName: string,
-    tokenAddress: string,
-    spenderAddress: string,
-    requiredAmount: bigint,
-    minAllowance: bigint,
-    tokenDecimals: number
-  ): Promise<void> {
-    const network = this.networkManager.getNetworkByName(networkName);
-    if (!network) throw new Error(`Network ${networkName} not found`);
-
-    const { publicClient, walletClient } =
-      this.viemClientManager.getClients(network);
-
-    const currentAllowance = await publicClient.readContract({
-      address: tokenAddress as `0x${string}`,
-      abi: ERC20_ABI,
-      functionName: 'allowance',
-      args: [walletClient.account.address, spenderAddress as `0x${string}`],
-    });
-
-    if (currentAllowance >= requiredAmount) {
-      this.logger.debug(
-        `Allowance sufficient: ${formatUnits(currentAllowance, tokenDecimals)} >= ${formatUnits(requiredAmount, tokenDecimals)}`
-      );
-      return;
-    }
-
-    const newAllowance =
-      requiredAmount > minAllowance ? requiredAmount : minAllowance;
-    this.logger.info(
-      `Setting allowance: ${formatUnits(currentAllowance, tokenDecimals)} -> ${formatUnits(newAllowance, tokenDecimals)}`
-    );
-
-    const txHash = await walletClient.writeContract({
-      address: tokenAddress as `0x${string}`,
-      abi: ERC20_ABI,
-      functionName: 'approve',
-      args: [spenderAddress as `0x${string}`, newAllowance],
-    });
-
-    this.logger.info(`Approve tx submitted: ${txHash} on ${networkName}`);
   }
 
   // Public getters
