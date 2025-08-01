@@ -403,7 +403,6 @@ export class Rebalancer extends ManagerBase {
         const iouAddress = this.deploymentManager.getIouAddress(networkName);
         if (!iouAddress) throw new Error(`IOU address not found for ${networkName}`);
 
-        this.logger.info(`Ensuring allowance for ${poolAddress} `);
         await this.balanceManager.ensureAllowance(networkName, iouAddress, poolAddress, amount);
 
         const { walletClient, publicClient } = this.viemClientManager.getClients(network);
