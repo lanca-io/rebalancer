@@ -1,7 +1,8 @@
-import { BalanceManager } from './BalanceManager';
+// ← same instance Rebalancer uses
 import { LancaNetworkManager } from './LancaNetworkManager';
 import { RebalanceOpportunity, RebalancerConfig } from './Rebalancer';
 
+import { BalanceManager } from '@concero/operator-utils';
 import { LoggerInterface } from '@concero/operator-utils';
 import { USDC_DECIMALS } from 'src/constants';
 import { formatUnits } from 'viem';
@@ -36,100 +37,78 @@ export class OpportunityScorer {
     public async scoreAndFilterOpportunities(
         opportunities: RebalanceOpportunity[],
     ): Promise<ScoredOpportunity[]> {
-        const scoredOpportunities: ScoredOpportunity[] = [];
+        const scored: ScoredOpportunity[] = [];
 
-        for (const opportunity of opportunities) {
-            const feasibility = await this.checkFeasibility(opportunity);
-            const score = feasibility.feasible ? this.calculateScore(opportunity) : 0;
+        for (const opp of opportunities) {
+            const { feasible, reasons } = await this.checkFeasibility(opp);
+            const score = feasible ? this.calculateScore(opp) : 0;
 
-            scoredOpportunities.push({
-                opportunity,
-                score,
-                feasible: feasibility.feasible,
-                feasibilityReasons: feasibility.reasons,
-            });
-
-            // this.logger.debug(
-            //   `Opportunity ${opportunity.type} on ${opportunity.toNetwork}: ` +
-            //     `Score: ${score.toFixed(2)}, Feasible: ${feasibility.feasible}`
-            // );
+            scored.push({ opportunity: opp, score, feasible, feasibilityReasons: reasons });
         }
 
-        return scoredOpportunities
-            .sort((a, b) => b.score - a.score)
-            .filter(
-                scored => scored.feasible && scored.score >= this.config.opportunityScorer.minScore,
-            );
+        return scored
+            .filter(s => s.feasible && s.score >= this.config.opportunityScorer.minScore)
+            .sort((a, b) => b.score - a.score);
     }
 
     private async checkFeasibility(
-        opportunity: RebalanceOpportunity,
+        opp: RebalanceOpportunity,
     ): Promise<{ feasible: boolean; reasons: string[] }> {
         const reasons: string[] = [];
 
-        if (opportunity.type === 'fillDeficit') {
-            const balance = this.balanceManager.getBalance(opportunity.toNetwork);
-            if (!balance || balance.usdc < opportunity.amount) {
-                reasons.push(`Insufficient USDC balance`);
+        switch (opp.type) {
+            case 'fillDeficit': {
+                const usdc = this.balanceManager.getTokenBalance(opp.toNetwork, 'USDC');
+                if (usdc < opp.amount) reasons.push('Insufficient USDC balance');
+                break;
             }
-        }
 
-        if (opportunity.type === 'takeSurplus') {
-            const balance = this.balanceManager.getBalance(opportunity.toNetwork);
-            if (!balance || balance.iou < opportunity.amount) {
-                reasons.push(`Insufficient IOU balance`);
+            case 'takeSurplus': {
+                const iou = this.balanceManager.getTokenBalance(opp.toNetwork, 'IOU');
+                if (iou < opp.amount) reasons.push('Insufficient IOU balance');
+                break;
             }
-        }
 
-        if (opportunity.type === 'bridgeIOU') {
-            if (!opportunity.fromNetwork) {
-                reasons.push(`Bridge operation requires fromNetwork`);
-            } else {
-                const balance = this.balanceManager.getBalance(opportunity.fromNetwork);
-                if (!balance || balance.iou < opportunity.amount) {
-                    reasons.push(`Insufficient IOU balance on source network`);
+            case 'bridgeIOU': {
+                if (!opp.fromNetwork) {
+                    reasons.push('Bridge operation requires fromNetwork');
+                } else {
+                    const iou = this.balanceManager.getTokenBalance(opp.fromNetwork, 'IOU');
+                    if (iou < opp.amount)
+                        reasons.push('Insufficient IOU balance on source network');
                 }
+                break;
             }
         }
 
-        const networkName = opportunity.fromNetwork || opportunity.toNetwork;
-        const hasGas = this.balanceManager.hasNativeBalance(networkName, 0n);
-        if (!hasGas) {
-            reasons.push(`Insufficient native gas on ${networkName}`);
-        }
+        const gasNetwork = opp.fromNetwork ?? opp.toNetwork;
+        const nativeGas = this.balanceManager.getNativeBalances().get(gasNetwork) ?? 0n;
+        if (nativeGas === 0n) reasons.push(`Insufficient native gas on ${gasNetwork}`);
 
         return { feasible: reasons.length === 0, reasons };
     }
 
-    private calculateScore(opportunity: RebalanceOpportunity): number {
-        const baseWeight = OPPORTUNITY_WEIGHTS[opportunity.type];
-        const costFactor = this.calculateCostFactor(opportunity);
-        const score = baseWeight * costFactor;
-
-        // this.logger.debug(
-        //   `Score calculation for ${opportunity.type}: ` +
-        //     `base=${baseWeight}, cost=${costFactor.toFixed(2)}, final=${score.toFixed(2)}`
-        // );
-
-        return score;
+    private calculateScore(opp: RebalanceOpportunity): number {
+        const base = OPPORTUNITY_WEIGHTS[opp.type];
+        return base * this.calculateCostFactor(opp);
     }
 
-    private calculateCostFactor(opportunity: RebalanceOpportunity): number {
-        const gasCostUSD = 1;
+    private calculateCostFactor(opp: RebalanceOpportunity): number {
+        const gasCostUSD = 1; // rough, constant
         let totalCostUSD = gasCostUSD;
 
-        if (opportunity.type === 'bridgeIOU' && opportunity.fromNetwork) {
-            const bridgeFee = this.getBridgeFee(opportunity.fromNetwork, opportunity.toNetwork);
+        if (opp.type === 'bridgeIOU' && opp.fromNetwork) {
+            const bridgeFee = this.getBridgeFee(opp.fromNetwork, opp.toNetwork);
             totalCostUSD += Number(formatUnits(bridgeFee, USDC_DECIMALS));
         }
 
-        const opportunityValueUSD = Number(formatUnits(opportunity.amount, USDC_DECIMALS));
-        const costRatio = totalCostUSD / opportunityValueUSD;
+        const valueUSD = Number(formatUnits(opp.amount, USDC_DECIMALS));
+        const ratio = totalCostUSD / valueUSD;
 
-        return Math.max(0.1, 1.0 - costRatio);
+        return Math.max(0.1, 1 - ratio);
     }
 
-    private getBridgeFee(_fromNetwork: string, _toNetwork: string): bigint {
+    private getBridgeFee(_from: string, _to: string): bigint {
         return 0n;
     }
 }

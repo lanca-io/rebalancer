@@ -1,16 +1,15 @@
-import type { BalanceManager } from './BalanceManager';
 import type { DeploymentManager } from './DeploymentManager';
 import type { LancaNetworkManager } from './LancaNetworkManager';
 import { OpportunityScorer, PoolData, ScoredOpportunity } from './OpportunityScroer';
 
-import { ManagerBase } from '@concero/operator-utils';
-import type { LoggerInterface } from '@concero/operator-utils/src/types/LoggerInterface';
+import { BalanceManager, IBalanceManager, ManagerBase } from '@concero/operator-utils';
 import type {
     ITxMonitor,
     ITxReader,
     ITxWriter,
     IViemClientManager,
-} from '@concero/operator-utils/src/types/managers';
+    LoggerInterface,
+} from '@concero/operator-utils';
 import { formatUnits } from 'viem';
 
 import { IOU_TOKEN_DECIMALS, FULL_LBF_ABI as LBF_ABI, USDC_DECIMALS } from '../constants';
@@ -48,7 +47,7 @@ export class Rebalancer extends ManagerBase {
     private txWriter: ITxWriter;
     private txMonitor: ITxMonitor;
     private viemClientManager: IViemClientManager;
-    private balanceManager: BalanceManager;
+    private balanceManager: IBalanceManager;
     private deploymentManager: DeploymentManager;
     private networkManager: LancaNetworkManager;
     private logger: LoggerInterface;
@@ -225,21 +224,12 @@ export class Rebalancer extends ManagerBase {
                 if (usdcBalance > 0n) {
                     const fillAmount = usdcBalance < data.deficit ? usdcBalance : data.deficit;
 
-                    // Check NET_TOTAL_ALLOWANCE
-                    const totalIOUAcrossChains = this.balanceManager.getTotalTokenBalance('IOU');
-                    const netAllowance =
-                        this.config.netTotalAllowance -
-                        (totalIOUAcrossChains - this.totalRedeemedUsdc);
-
-                    if (netAllowance > 0n) {
-                        const actualAmount = fillAmount < netAllowance ? fillAmount : netAllowance;
-                        opportunities.push({
-                            type: 'fillDeficit',
-                            toNetwork: networkName,
-                            amount: actualAmount,
-                            reason: `Fill deficit of ${formatUnits(data.deficit, USDC_DECIMALS)} USDC`,
-                        });
-                    }
+                    opportunities.push({
+                        type: 'fillDeficit',
+                        toNetwork: networkName,
+                        amount: fillAmount,
+                        reason: `Fill deficit of ${formatUnits(data.deficit, USDC_DECIMALS)} USDC`,
+                    });
                 }
             }
         }
@@ -269,27 +259,20 @@ export class Rebalancer extends ManagerBase {
 
     private discoverIOUBridgingOpportunities(): RebalanceOpportunity[] {
         const opportunities: RebalanceOpportunity[] = [];
-        const allBalances = this.balanceManager.getAllBalances();
-
-        // Find networks with IOU but no local opportunities
-        const candidateNetworks = Array.from(allBalances.entries())
-            .filter(([network, balance]) => {
-                const iouBalance = balance.tokens.get('IOU') || 0n;
-                if (iouBalance === 0n) return false;
-
-                // Check if network has local opportunities
-                const poolData = this.poolData.get(network);
-                if (!poolData) return false;
-
-                const hasLocalDeficit = poolData.deficit >= this.config.deficitThreshold;
-                const hasLocalSurplus = poolData.surplus >= this.config.surplusThreshold;
-
-                return !hasLocalDeficit && !hasLocalSurplus;
+        const candidateNetworks = this.networkManager
+            .getActiveNetworks()
+            .map(n => {
+                const iouBalance = this.balanceManager.getTokenBalance(n.name, 'IOU');
+                const pool = this.poolData.get(n.name);
+                const hasLocalDeficit = pool ? pool.deficit >= this.config.deficitThreshold : false;
+                const hasLocalSurplus = pool ? pool.surplus >= this.config.surplusThreshold : false;
+                return {
+                    network: n.name,
+                    iouBalance,
+                    eligible: iouBalance > 0n && !hasLocalDeficit && !hasLocalSurplus,
+                };
             })
-            .map(([network, balance]) => ({
-                network,
-                iouBalance: balance.tokens.get('IOU') || 0n,
-            }));
+            .filter(x => x.eligible);
 
         if (candidateNetworks.length === 0) return opportunities;
 
@@ -299,7 +282,6 @@ export class Rebalancer extends ManagerBase {
             .sort(([, a], [, b]) => (a.surplus > b.surplus ? -1 : 1));
 
         if (surplusNetworks.length === 0) return opportunities;
-
         const [bestSurplusNetwork, bestSurplusData] = surplusNetworks[0];
 
         // Create bridge opportunities to best surplus network
@@ -409,6 +391,9 @@ export class Rebalancer extends ManagerBase {
     }
 
     private async takeSurplus(networkName: string, amount: bigint): Promise<void> {
+        this.logger.info(
+            `Taking USDC surplus in exchange for ${amount} IOU tokens on ${networkName}`,
+        );
         const network = this.networkManager.getNetworkByName(networkName);
         if (!network) throw new Error(`Network ${networkName} not found`);
 
@@ -418,6 +403,7 @@ export class Rebalancer extends ManagerBase {
         const iouAddress = this.deploymentManager.getIouAddress(networkName);
         if (!iouAddress) throw new Error(`IOU address not found for ${networkName}`);
 
+        this.logger.info(`Ensuring allowance for ${poolAddress} `);
         await this.balanceManager.ensureAllowance(networkName, iouAddress, poolAddress, amount);
 
         const { walletClient, publicClient } = this.viemClientManager.getClients(network);
@@ -428,7 +414,7 @@ export class Rebalancer extends ManagerBase {
             abi: LBF_ABI,
             functionName: 'takeSurplus',
             args: [amount],
-            gasLimit: 1_000_000,
+            gasLimit: 1_000_000n,
         });
         await publicClient.waitForTransactionReceipt({ hash: txHash });
 

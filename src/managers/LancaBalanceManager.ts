@@ -1,9 +1,12 @@
-import { BalanceManager, type BalanceManagerConfig } from './BalanceManager';
 import type { DeploymentManager } from './DeploymentManager';
 
-import type { ConceroNetwork } from '@concero/operator-utils/src/types/ConceroNetwork';
-import type { LoggerInterface } from '@concero/operator-utils/src/types/LoggerInterface';
-import type { ITxReader, IViemClientManager } from '@concero/operator-utils/src/types/managers';
+import { BalanceManager, BalanceManagerConfig } from '@concero/operator-utils';
+import type {
+    ConceroNetwork,
+    ITxReader,
+    IViemClientManager,
+    LoggerInterface,
+} from '@concero/operator-utils';
 
 export class LancaBalanceManager extends BalanceManager {
     private static instance: LancaBalanceManager;
@@ -45,8 +48,6 @@ export class LancaBalanceManager extends BalanceManager {
     }
 
     protected async setupTokenWatchers(): Promise<void> {
-        this.clearTokenWatchers();
-
         const deployments = this.deploymentManager.getDeployments();
         let watcherCount = 0;
 
@@ -56,12 +57,12 @@ export class LancaBalanceManager extends BalanceManager {
             const iouAddress = deployments.iouTokens[networkName];
 
             if (usdcAddress) {
-                this.addTokenWatcher(network, 'USDC', usdcAddress);
+                this.watchToken(network, 'USDC', usdcAddress);
                 watcherCount++;
             }
 
             if (iouAddress) {
-                this.addTokenWatcher(network, 'IOU', iouAddress);
+                this.watchToken(network, 'IOU', iouAddress);
                 watcherCount++;
             }
         }

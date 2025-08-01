@@ -86,12 +86,12 @@
 
 "@concero/operator-utils@github:concero/operator-utils":
   version "1.0.0"
-  resolved "https://codeload.github.com/concero/operator-utils/tar.gz/b2b425a69a92dbd2f1bbff96758c575123e24b3a"
+  resolved "https://codeload.github.com/concero/operator-utils/tar.gz/5d4f3c71fb99c919d07b2a83527fca6132e71a47"
   dependencies:
     async-mutex "^0.5.0"
-    axios "^1.10.0"
+    axios "^1.11.0"
     uuid "^11.1.0"
-    viem "^2.33.0"
+    viem "^2.33.2"
     winston "^3.17.0"
     winston-daily-rotate-file "^5.0.0"
 
@@ -637,7 +637,7 @@ asynckit@^0.4.0:
   resolved "https://registry.yarnpkg.com/asynckit/-/asynckit-0.4.0.tgz#c79ed97f7f34cb8f2ba1bc9790bcc366474b4b79"
   integrity sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==
 
-axios@^1.10.0:
+axios@^1.11.0:
   version "1.11.0"
   resolved "https://registry.yarnpkg.com/axios/-/axios-1.11.0.tgz#c2ec219e35e414c025b2095e8b8280278478fdb6"
   integrity sha512-1Lx3WLFQWm3ooKDYZD1eXmoGO9fxYQjrycfHFC8P0sCfQVXyROp0p9PFWBehewBOdCwHc+f/b8I0fMto5eSfwA==
@@ -1696,7 +1696,7 @@ viem@^2.21.55:
     ox "0.8.1"
     ws "8.18.2"
 
-viem@^2.33.0:
+viem@^2.33.2:
   version "2.33.2"
   resolved "https://registry.yarnpkg.com/viem/-/viem-2.33.2.tgz#039732775976efb821a2f7c6c6d4cd6029f5af4f"
   integrity sha512-/720OaM4dHWs8vXwNpyet+PRERhPaW+n/1UVSCzyb9jkmwwVfaiy/R6YfCFb4v+XXbo8s3Fapa3DM5yCRSkulA==

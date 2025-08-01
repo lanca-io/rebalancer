@@ -9,6 +9,7 @@ import {
     TxWriter,
     ViemClientManager,
 } from '@concero/operator-utils';
+import { IOU_TOKEN_DECIMALS, USDC_DECIMALS } from 'src/constants';
 
 import { globalConfig } from '../constants/globalConfig';
 import {
@@ -125,7 +126,10 @@ export async function initializeManagers(
         deploymentManager,
         txReader,
         {
-            updateIntervalMs: config.BALANCE_MANAGER.UPDATE_INTERVAL_MS,
+            minAllowances: new Map([
+                ['USDC', config.BALANCE_MANAGER.MIN_ALLOWANCE_USDC],
+                ['IOU', config.BALANCE_MANAGER.MIN_ALLOWANCE_IOU],
+            ]),
         },
     );
 

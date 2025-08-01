@@ -1,13 +1,13 @@
 import type { DeploymentManager } from './DeploymentManager';
 
 import { ManagerBase } from '@concero/operator-utils';
-import type { ConceroNetwork } from '@concero/operator-utils/src/types/ConceroNetwork';
-import type { LoggerInterface } from '@concero/operator-utils/src/types/LoggerInterface';
 import type {
+    ConceroNetwork,
     IConceroNetworkManager,
     INetworkManager,
+    LoggerInterface,
     NetworkUpdateListener,
-} from '@concero/operator-utils/src/types/managers';
+} from '@concero/operator-utils';
 
 export interface LancaNetworkManagerConfig {
     networkUpdateIntervalMs: number;

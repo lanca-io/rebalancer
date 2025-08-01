@@ -70,17 +70,17 @@ const globalConfig: GlobalConfig = {
         TOKEN_PATTERNS: [/USDC_(.+)/, /IOU_(.+)/],
     },
     BALANCE_MANAGER: {
-        UPDATE_INTERVAL_MS: parseInt(getEnvVar('BALANCE_UPDATE_INTERVAL_MS')),
+        UPDATE_INTERVAL_MS: parseInt(getEnvVar('BALANCE_MANAGER_UPDATE_INTERVAL_MS')),
+        MIN_ALLOWANCE: {
+            USDC: parseUnits(getEnvVar('BALANCE_MANAGER_MIN_ALLOWANCE_USDC'), USDC_DECIMALS),
+            IOU: parseUnits(getEnvVar('BALANCE_MANAGER_MIN_ALLOWANCE_IOU'), IOU_TOKEN_DECIMALS),
+        },
     },
     REBALANCER: {
         DEFICIT_THRESHOLD: parseUnits(getEnvVar('REBALANCER_DEFICIT_THRESHOLD'), USDC_DECIMALS),
         SURPLUS_THRESHOLD: parseUnits(getEnvVar('REBALANCER_SURPLUS_THRESHOLD'), USDC_DECIMALS),
         CHECK_INTERVAL_MS: parseInt(getEnvVar('REBALANCER_CHECK_INTERVAL_MS')),
         NET_TOTAL_ALLOWANCE: parseUnits(getEnvVar('REBALANCER_NET_TOTAL_ALLOWANCE'), USDC_DECIMALS),
-        MIN_ALLOWANCE: {
-            USDC: parseUnits(getEnvVar('REBALANCER_MIN_ALLOWANCE_USDC'), USDC_DECIMALS),
-            IOU: parseUnits(getEnvVar('REBALANCER_MIN_ALLOWANCE_IOU'), IOU_TOKEN_DECIMALS),
-        },
     },
     OPPORTUNITY_SCORER: {
         MIN_SCORE: parseInt(getEnvVar('OPPORTUNITY_SCORER_MIN_SCORE')),
