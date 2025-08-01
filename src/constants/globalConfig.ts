@@ -1,114 +1,96 @@
-import { getEnvVar } from '@concero/operator-utils';
+import { getEnvVar, getGranularLogLevels } from '@concero/operator-utils';
 import { IOU_TOKEN_DECIMALS, USDC_DECIMALS } from 'src/constants/tokens';
 import { seconds } from 'src/utils/time';
 import { parseUnits } from 'viem';
+
 import { type GlobalConfig } from '../types/GlobalConfig';
 
 const globalConfig: GlobalConfig = {
-  NETWORK_MODE: getEnvVar('NETWORK_MODE') as
-    | 'mainnet'
-    | 'testnet'
-    | 'localhost',
-  OPERATOR_ADDRESS: getEnvVar('OPERATOR_ADDRESS'),
-  IGNORED_NETWORK_IDS: [],
-  WHITELISTED_NETWORK_IDS: {
-    mainnet: [],
-    testnet: [],
-    localhost: [],
-  },
-  LOGGER: {
-    LOG_DIR: 'logs',
-    LOG_MAX_FILES: '7d',
-    LOG_MAX_SIZE: '20m',
-    LOG_LEVEL_DEFAULT: getEnvVar('LOG_LEVEL_DEFAULT'),
-  },
-  URLS: {
-    CONCERO_RPCS: `https://raw.githubusercontent.com/concero/rpcs/refs/heads/master/output`,
-    LANCA_POOL_DEPLOYMENTS: {
-      MAINNET:
-        'https://raw.githubusercontent.com/lanca-io/lbf-contracts/refs/heads/master/.env.deployments.mainnet',
-      TESTNET:
-        'https://raw.githubusercontent.com/lanca-io/lbf-contracts/refs/heads/master/.env.deployments.testnet',
+    NETWORK_MODE: getEnvVar('NETWORK_MODE') as 'mainnet' | 'testnet' | 'localhost',
+    OPERATOR_ADDRESS: getEnvVar('OPERATOR_ADDRESS'),
+    IGNORED_NETWORK_IDS: [],
+    WHITELISTED_NETWORK_IDS: {
+        mainnet: [],
+        testnet: [],
+        localhost: [],
     },
-    LANCA_TOKEN_DEPLOYMENTS: {
-      MAINNET:
-        'https://raw.githubusercontent.com/lanca-io/lbf-contracts/refs/heads/master/.env.tokens.mainnet',
-      TESTNET:
-        'https://raw.githubusercontent.com/lanca-io/lbf-contracts/refs/heads/master/.env.tokens.testnet',
+    LOGGER: {
+        LOG_DIR: 'logs',
+        LOG_MAX_FILES: '7d',
+        LOG_MAX_SIZE: '20m',
+        LOG_LEVEL_DEFAULT: getEnvVar('LOG_LEVEL_DEFAULT'),
+        LOG_LEVELS_GRANULAR: getGranularLogLevels(),
     },
-    V2_NETWORKS: {
-      MAINNET:
-        'https://github.com/concero/v2-networks/raw/refs/heads/master/networks/mainnet.json',
-      TESTNET:
-        'https://github.com/concero/v2-networks/raw/refs/heads/master/networks/testnet.json',
+    URLS: {
+        CONCERO_RPCS: `https://raw.githubusercontent.com/concero/rpcs/refs/heads/master/output`,
+        LANCA_POOL_DEPLOYMENTS: {
+            MAINNET:
+                'https://raw.githubusercontent.com/lanca-io/lbf-contracts/refs/heads/master/.env.deployments.mainnet',
+            TESTNET:
+                'https://raw.githubusercontent.com/lanca-io/lbf-contracts/refs/heads/master/.env.deployments.testnet',
+        },
+        LANCA_TOKEN_DEPLOYMENTS: {
+            MAINNET:
+                'https://raw.githubusercontent.com/lanca-io/lbf-contracts/refs/heads/master/.env.tokens.mainnet',
+            TESTNET:
+                'https://raw.githubusercontent.com/lanca-io/lbf-contracts/refs/heads/master/.env.tokens.testnet',
+        },
+        V2_NETWORKS: {
+            MAINNET:
+                'https://github.com/concero/v2-networks/raw/refs/heads/master/networks/mainnet.json',
+            TESTNET:
+                'https://github.com/concero/v2-networks/raw/refs/heads/master/networks/testnet.json',
+        },
     },
-  },
-  VIEM: {
-    FALLBACK_TRANSPORT_OPTIONS: {
-      retryCount: 5,
-      retryDelay: 150,
+    VIEM: {
+        FALLBACK_TRANSPORT_OPTIONS: {
+            retryCount: 5,
+            retryDelay: 150,
+        },
     },
-  },
-  HTTPCLIENT: {
-    DEFAULT_TIMEOUT: seconds(5),
-    MAX_RETRIES: 3,
-    RETRY_DELAY: 100,
-  },
-  RPC: {
-    OVERRIDE: {},
-    EXTENSION: {},
-  },
-  TX_MANAGER: {
-    DRY_RUN: getEnvVar('DRY_RUN') === 'true',
-    DEFAULT_CONFIRMATIONS: 3,
-  },
+    HTTPCLIENT: {
+        DEFAULT_TIMEOUT: seconds(5),
+        MAX_RETRIES: 3,
+        RETRY_DELAY: 100,
+    },
+    RPC: {
+        OVERRIDE: {},
+        EXTENSION: {},
+    },
+    TX_MANAGER: {
+        DRY_RUN: getEnvVar('DRY_RUN') === 'true',
+        DEFAULT_CONFIRMATIONS: 3,
+    },
 
-  LANCA_NETWORK_MANAGER: {
-    NETWORK_UPDATE_INTERVAL_MS: parseInt(
-      getEnvVar('LANCA_NETWORK_UPDATE_INTERVAL_MS')
-    ),
-  },
-  DEPLOYMENT_MANAGER: {
-    POOL_PATTERNS: [/LBF_CHILD_POOL_(.+)/, /LBF_PARENT_POOL_(.+)/],
-    TOKEN_PATTERNS: [/USDC_(.+)/, /IOU_(.+)/],
-  },
-  BALANCE_MANAGER: {
-    UPDATE_INTERVAL_MS: parseInt(getEnvVar('BALANCE_UPDATE_INTERVAL_MS')),
-  },
-  REBALANCER: {
-    DEFICIT_THRESHOLD: parseUnits(
-      getEnvVar('REBALANCER_DEFICIT_THRESHOLD'),
-      USDC_DECIMALS
-    ),
-    SURPLUS_THRESHOLD: parseUnits(
-      getEnvVar('REBALANCER_SURPLUS_THRESHOLD'),
-      USDC_DECIMALS
-    ),
-    CHECK_INTERVAL_MS: parseInt(getEnvVar('REBALANCER_CHECK_INTERVAL_MS')),
-    NET_TOTAL_ALLOWANCE: parseUnits(
-      getEnvVar('REBALANCER_NET_TOTAL_ALLOWANCE'),
-      USDC_DECIMALS
-    ),
-    MIN_ALLOWANCE: {
-      USDC: parseUnits(
-        getEnvVar('REBALANCER_MIN_ALLOWANCE_USDC'),
-        USDC_DECIMALS
-      ),
-      IOU: parseUnits(
-        getEnvVar('REBALANCER_MIN_ALLOWANCE_IOU'),
-        IOU_TOKEN_DECIMALS
-      ),
+    LANCA_NETWORK_MANAGER: {
+        NETWORK_UPDATE_INTERVAL_MS: parseInt(getEnvVar('LANCA_NETWORK_UPDATE_INTERVAL_MS')),
     },
-  },
-  OPPORTUNITY_SCORER: {
-    MIN_SCORE: parseInt(getEnvVar('OPPORTUNITY_SCORER_MIN_SCORE')),
-  },
-  TX_MONITOR: {
-    CHECK_INTERVAL_MS: seconds(5),
-    DROP_TIMEOUT_MS: seconds(60),
-    RETRY_DELAY_MS: seconds(30),
-  },
-  NONCE_MANAGER: {},
+    DEPLOYMENT_MANAGER: {
+        POOL_PATTERNS: [/LBF_CHILD_POOL_(.+)/, /LBF_PARENT_POOL_(.+)/],
+        TOKEN_PATTERNS: [/USDC_(.+)/, /IOU_(.+)/],
+    },
+    BALANCE_MANAGER: {
+        UPDATE_INTERVAL_MS: parseInt(getEnvVar('BALANCE_UPDATE_INTERVAL_MS')),
+    },
+    REBALANCER: {
+        DEFICIT_THRESHOLD: parseUnits(getEnvVar('REBALANCER_DEFICIT_THRESHOLD'), USDC_DECIMALS),
+        SURPLUS_THRESHOLD: parseUnits(getEnvVar('REBALANCER_SURPLUS_THRESHOLD'), USDC_DECIMALS),
+        CHECK_INTERVAL_MS: parseInt(getEnvVar('REBALANCER_CHECK_INTERVAL_MS')),
+        NET_TOTAL_ALLOWANCE: parseUnits(getEnvVar('REBALANCER_NET_TOTAL_ALLOWANCE'), USDC_DECIMALS),
+        MIN_ALLOWANCE: {
+            USDC: parseUnits(getEnvVar('REBALANCER_MIN_ALLOWANCE_USDC'), USDC_DECIMALS),
+            IOU: parseUnits(getEnvVar('REBALANCER_MIN_ALLOWANCE_IOU'), IOU_TOKEN_DECIMALS),
+        },
+    },
+    OPPORTUNITY_SCORER: {
+        MIN_SCORE: parseInt(getEnvVar('OPPORTUNITY_SCORER_MIN_SCORE')),
+    },
+    TX_MONITOR: {
+        CHECK_INTERVAL_MS: seconds(5),
+        DROP_TIMEOUT_MS: seconds(60),
+        RETRY_DELAY_MS: seconds(30),
+    },
+    NONCE_MANAGER: {},
 };
 
 export { globalConfig };
