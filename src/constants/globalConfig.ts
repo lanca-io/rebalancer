@@ -57,6 +57,9 @@ const globalConfig: GlobalConfig = {
         OVERRIDE: {},
         EXTENSION: {},
     },
+    TX_READER: {
+        WATCHER_INTERVAL_MS: parseInt(getEnvVar('TX_READER_WATCHER_INTERVAL_MS')),
+    },
     TX_MANAGER: {
         DRY_RUN: getEnvVar('DRY_RUN') === 'true',
         DEFAULT_CONFIRMATIONS: 3,

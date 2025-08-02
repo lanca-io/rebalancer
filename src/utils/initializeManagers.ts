@@ -116,7 +116,9 @@ export async function initializeManagers(
         logger.getLogger('TxReader'),
         lancaNetworkManager,
         viemClientManager,
-        {},
+        {
+            watcherIntervalMs: config.TX_READER.WATCHER_INTERVAL_MS,
+        },
     );
 
     // Initialize LancaBalanceManager (changed from BalanceManager)
@@ -187,8 +189,6 @@ export async function initializeManagers(
             deficitThreshold: config.REBALANCER.DEFICIT_THRESHOLD,
             surplusThreshold: config.REBALANCER.SURPLUS_THRESHOLD,
             checkIntervalMs: config.REBALANCER.CHECK_INTERVAL_MS,
-            netTotalAllowance: config.REBALANCER.NET_TOTAL_ALLOWANCE,
-            minAllowance: config.REBALANCER.MIN_ALLOWANCE,
             opportunityScorer: {
                 minScore: config.OPPORTUNITY_SCORER.MIN_SCORE,
             },

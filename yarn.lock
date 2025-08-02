@@ -86,7 +86,7 @@
 
 "@concero/operator-utils@github:concero/operator-utils":
   version "1.0.0"
-  resolved "https://codeload.github.com/concero/operator-utils/tar.gz/5d4f3c71fb99c919d07b2a83527fca6132e71a47"
+  resolved "https://codeload.github.com/concero/operator-utils/tar.gz/ab0d489a9bdcc38af5e0e23218b8522ac7c35685"
   dependencies:
     async-mutex "^0.5.0"
     axios "^1.11.0"

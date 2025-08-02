@@ -41,6 +41,7 @@ export interface GlobalConfig extends LocalhostConfigOverrides {
         OVERRIDE: Record<string, string[]>;
         EXTENSION: Record<string, string[]>;
     };
+    TX_READER: { WATCHER_INTERVAL_MS: number };
     TX_MANAGER: {
         DRY_RUN: boolean;
         DEFAULT_CONFIRMATIONS: number;
@@ -54,16 +55,16 @@ export interface GlobalConfig extends LocalhostConfigOverrides {
     };
     BALANCE_MANAGER: {
         UPDATE_INTERVAL_MS: number;
+        MIN_ALLOWANCE: {
+            USDC: bigint;
+            IOU: bigint;
+        };
     };
     REBALANCER: {
         DEFICIT_THRESHOLD: bigint;
         SURPLUS_THRESHOLD: bigint;
         CHECK_INTERVAL_MS: number;
         NET_TOTAL_ALLOWANCE: bigint;
-        MIN_ALLOWANCE: {
-            USDC: bigint;
-            IOU: bigint;
-        };
     };
     OPPORTUNITY_SCORER: {
         MIN_SCORE: number;
@@ -73,5 +74,6 @@ export interface GlobalConfig extends LocalhostConfigOverrides {
         DROP_TIMEOUT_MS: number;
         RETRY_DELAY_MS: number;
     };
+
     NONCE_MANAGER: Record<string, never>;
 }

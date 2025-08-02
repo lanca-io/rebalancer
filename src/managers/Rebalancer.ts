@@ -17,12 +17,6 @@ import { IOU_TOKEN_DECIMALS, FULL_LBF_ABI as LBF_ABI, USDC_DECIMALS } from '../c
 export interface RebalancerConfig {
     deficitThreshold: bigint;
     surplusThreshold: bigint;
-    checkIntervalMs: number;
-    netTotalAllowance: bigint;
-    minAllowance: {
-        USDC: bigint;
-        IOU: bigint;
-    };
     opportunityScorer: {
         minScore: number;
     };
@@ -59,7 +53,7 @@ export class Rebalancer extends ManagerBase {
         txWriter: ITxWriter,
         txMonitor: ITxMonitor,
         viemClientManager: IViemClientManager,
-        balanceManager: BalanceManager,
+        balanceManager: IBalanceManager,
         deploymentManager: DeploymentManager,
         networkManager: LancaNetworkManager,
         config: RebalancerConfig,
@@ -155,7 +149,7 @@ export class Rebalancer extends ManagerBase {
 
         const { bulkId } = this.txReader.readContractWatcher.bulkCreate(
             items,
-            { timeoutMs: this.config.checkIntervalMs * 0.8 }, // 80 % of interval
+            {},
             async ({ results, errors }) => {
                 for (const err of errors) {
                     this.logger.error(`getPoolData failed on ${err.network.name}: ${err.error}`);
@@ -328,6 +322,8 @@ export class Rebalancer extends ManagerBase {
                 await this.takeSurplus(opportunity.toNetwork, opportunity.amount);
                 break;
         }
+
+        await this.balanceManager.forceUpdate();
     }
 
     private async fillDeficit(networkName: string, amount: bigint): Promise<void> {
