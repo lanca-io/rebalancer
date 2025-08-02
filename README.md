@@ -9,7 +9,7 @@ The Lanca Rebalancer is a sophisticated arbitrage and liquidity management bot t
 ### Core Operations
 
 1. **Deficit Filling**: When a pool has insufficient USDC liquidity, the rebalancer fills the deficit using its USDC reserves and receives IOU tokens
-2. **IOU Bridging**: Strategically moves IOU tokens across chains to locations with the highest surplus for optimal redemption  
+2. **IOU Bridging**: Strategically moves IOU tokens across chains to locations with the highest surplus for optimal redemption
 3. **Surplus Redemption**: Exchanges IOU tokens for USDC from pools with excess liquidity
 
 The rebalancer earns profit through IOU premium fees charged when filling deficits, creating a sustainable incentive mechanism for maintaining cross-chain liquidity.
@@ -223,7 +223,7 @@ BalanceManager uses TxReader's contract watchers for real-time updates:
 ```
 For each active network:
 ├── Create USDC balance watcher (balanceOf function)
-├── Create IOU balance watcher (balanceOf function)  
+├── Create IOU balance watcher (balanceOf function)
 ├── Poll native balances periodically
 ├── Update internal state on balance changes
 └── Provide balance queries to Rebalancer
@@ -327,7 +327,6 @@ LANCA_TOKEN_DEPLOYMENTS_URL=https://...  # Token contracts env file
 # Update Intervals
 LANCA_NETWORK_UPDATE_INTERVAL_MS=300000  # Network updates (5 min)
 BALANCE_UPDATE_INTERVAL_MS=60000         # Balance updates (1 min)
-REBALANCER_CHECK_INTERVAL_MS=30000       # Pool checks (30 sec)
 
 # Rebalancing Parameters
 REBALANCER_DEFICIT_THRESHOLD=10          # Min deficit to fill (USDC)

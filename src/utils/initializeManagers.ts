@@ -188,7 +188,6 @@ export async function initializeManagers(
         {
             deficitThreshold: config.REBALANCER.DEFICIT_THRESHOLD,
             surplusThreshold: config.REBALANCER.SURPLUS_THRESHOLD,
-            checkIntervalMs: config.REBALANCER.CHECK_INTERVAL_MS,
             opportunityScorer: {
                 minScore: config.OPPORTUNITY_SCORER.MIN_SCORE,
             },
